@@ -1,2 +1,2 @@
-# tts-senotori-public
+# tts-sen-public
 [TTS] SEN | Dashboard

@@ -1,6 +1,6 @@
 <!doctype html>
-<html lang="vi" class="lk"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="description" content="SEN TTS | Báo cáo dự án. Nội bộ Megaficus. Nhập mật khẩu để mở."><meta name="robots" content="noindex,nofollow,noarchive"><meta property="og:title" content="SEN TTS | Báo cáo dự án"><meta property="og:description" content="Nội bộ Megaficus. Nhập mật khẩu để mở.">
-<title>SEN TTS | Báo cáo dự án</title>
+<html lang="vi" class="lk"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="description" content="SEN TTS | Báo cáo dự án. Nội bộ Megaficus. Nhập mật khẩu để mở."><meta name="robots" content="noindex,nofollow,noarchive"><meta property="og:title" content="[TTS] SEN"><meta property="og:description" content="Nội bộ Megaficus. Nhập mật khẩu để mở.">
+<title>[TTS] SEN</title>
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap');
 :root{--bg:#f7f7f5;--panel:#fff;--fg:#1c1c1a;--mut:#6b6b66;--line:#e4e3de;--acc:#2563eb;--ok:#15803d;--bad:#dc2626;--warn:#d4a017;--c1:#2563eb;--c2:#0f9d8a;--c3:#e67e22;--c4:#8e6bbf;--c5:#f4b400;--sub:#f1f0ec}
@@ -149,7 +149,7 @@ function tgls(){const col=window.__col=window.__col||{};document.querySelectorAl
  ['t-ap1','t-ap2','t-ca1','t-ca2'].forEach(id=>{const sc=$(id).parentNode;const b=el('button','tgl');const set=()=>{sc.style.display=col[id]?'none':'';b.textContent=col[id]?'Mở rộng bảng ▸':'Thu gọn bảng ▾'};set();b.onclick=()=>{col[id]=!col[id];set()};sc.parentNode.insertBefore(b,sc)})}
 function init(){
  $('take').textContent=P.take;
- const M=P.meta;$('h1t').textContent=M.single?'SEN TTS | Báo cáo tháng '+M.frm.slice(3,5).replace(/^0/,'')+'/'+M.frm.slice(6):'SEN TTS | Báo cáo '+M.frm+' → '+M.to;document.title=$('h1t').textContent;
+ const M=P.meta;$('h1t').textContent=M.single?'SEN TTS | Báo cáo tháng '+M.frm.slice(3,5).replace(/^0/,'')+'/'+M.frm.slice(6):'SEN TTS | Báo cáo '+M.frm+' → '+M.to;document.title="[TTS] SEN";
  $('h-ov').textContent='Overview · Tổng quan '+(M.single?'cả tháng '+M.frm.slice(3,5).replace(/^0/,''):'kỳ '+M.frm+' → '+M.to);
  $('h-mom').textContent=M.noprev?'So sánh kỳ trước (chưa có kỳ trước đủ dữ liệu)':(M.pmonth?'So sánh MoM (tháng '+M.frm.slice(3,5).replace(/^0/,'')+' vs tháng '+M.pfrm.slice(3,5).replace(/^0/,'')+')':'So sánh với kỳ liền trước cùng độ dài');
  $('h-pb').textContent='Chỉ số theo sản phẩm (GMV Max, '+M.crng+')';$('pb-note').textContent=M.noprev?'Chưa có kỳ trước đủ dữ liệu để so sánh ROAS.':'ROAS '+M.pshort+' là '+(M.pmonth?'cả tháng '+M.pshort.slice(1)+'.':'kỳ liền trước '+M.prng+'.');

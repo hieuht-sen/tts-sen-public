@@ -72,7 +72,7 @@ td.ok{color:var(--ok)}td.bad{color:var(--bad)}td.roas-g{color:var(--ok);font-wei
 <p class="note" id="ap-pnote" style="display:none"></p>
 <div class="tiles" id="ap-cards"></div>
 <div class="card"><div class="hd"><h3>Tiến trình Ads: Ads GMV, Total Ads Spend, Item Orders</h3><div class="seg" data-k="ap1"></div></div><div class="ch" id="ch-ap1"></div><div class="leg" id="lg-ap1"></div><div class="scroll"><table id="t-ap1"></table></div></div>
-<div class="card"><div class="hd"><h3>Total Ads Spend: GMV Max vs Ads Manager</h3><div class="seg" data-k="ap4"></div></div><div class="ch" id="ch-ap4"></div><div class="leg" id="lg-ap4"></div></div>
+<div class="card"><div class="hd"><h3>Total Ads Spend: GMV Max vs Ads Manager</h3><span class="note" style="font-size:11.5px">Luôn tính toàn bộ sản phẩm (Ads Manager không tách được theo sản phẩm)</span><div class="seg" data-k="ap4"></div></div><div class="ch" id="ch-ap4"></div><div class="leg" id="lg-ap4"></div></div>
 <div class="card"><div class="hd"><h3>ROAS và CPA</h3><div class="seg" data-k="ap2"></div></div>
 <div class="two"><div><p class="note"><b>ROAS</b></p><div class="ch" id="ch-ap2"></div><div class="leg" id="lg-ap2"></div></div><div><p class="note"><b>CPA (GMV Max)</b></p><div class="ch" id="ch-ap3"></div></div></div>
 <div class="scroll"><table id="t-ap2"></table></div></div>
@@ -171,7 +171,7 @@ function init(){
 };
  apCards();
  const a1=()=>{const g=st.ap1,c=apd().AP[g];chart($('ch-ap1'),$('lg-ap1'),c.prog,c.labels);table($('t-ap1'),c.t1)};seg('ap1',a1);a1();
- const a4=()=>{const g=st.ap4,c=apd().AP[g];chart($('ch-ap4'),$('lg-ap4'),c.sp,c.labels)};seg('ap4',a4);a4();
+ const a4=()=>{const g=st.ap4,c=P.AP[g];chart($('ch-ap4'),$('lg-ap4'),c.sp,c.labels)};seg('ap4',a4);a4();
  const a2=()=>{const g=st.ap2,c=apd().AP[g];chart($('ch-ap2'),$('lg-ap2'),c.roi,c.labels);chart($('ch-ap3'),el('div'),c.cpa,c.labels);table($('t-ap2'),c.t2)};seg('ap2',a2);a2();
  table($('t-apb'),P.PBRK);
  {const bx=$('ap-prod');bx.replaceChildren();Object.keys(PN).forEach(k=>{const b=el('button','',PN[k]);if(st.prod===k)b.className='on';b.onclick=()=>{st.prod=k;bx.querySelectorAll('button').forEach(x=>x.className='');b.className='on';$('ap-pill').textContent=PN[k];const pn=$('ap-pnote');pn.style.display=k==='all'?'none':'';pn.textContent=k==='all'?'':'Đang xem '+PN[k]+': chỉ tính chi phí GMV Max của sản phẩm này (Ads Manager không tách được theo sản phẩm, bằng 0), Total Ads Spend = GMV Max; ngày không có đơn/chi phí hiển thị 0.';apCards();a1();a2();tgls()};bx.appendChild(b)});

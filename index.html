@@ -43,7 +43,7 @@ td.ok{color:var(--ok)}td.bad{color:var(--bad)}td.roas-g{color:var(--ok);font-wei
 </style><style>html.lk body>*:not(#gate){display:none!important}#gate{position:fixed;inset:0;z-index:99999;display:flex;align-items:center;justify-content:center;background:#f7f7f5;color:#1c1c1a;font:14px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif}@media (prefers-color-scheme:dark){#gate{background:#161615;color:#ecebe6}}#gate form{width:min(380px,calc(100% - 32px));background:rgba(127,127,127,.08);border:1px solid rgba(127,127,127,.3);border-radius:14px;padding:28px 24px}#gate h1{font-size:18px;margin:0 0 4px}#gate p{margin:0 0 16px;opacity:.7;font-size:13px}#gate input{width:100%;padding:10px 12px;border:1px solid rgba(127,127,127,.4);border-radius:8px;background:transparent;color:inherit;font:inherit}#gate button{margin-top:12px;width:100%;padding:10px;border:0;border-radius:8px;background:#2563eb;color:#fff;font:inherit;font-weight:600;cursor:pointer}#gate button:disabled{opacity:.6}#gate .e{color:#dc2626;font-size:12px;min-height:18px;margin-top:8px}</style></head><body><div id="gate"><form id="gf"><h1>SEN TTS | Báo cáo dự án</h1><p>Nội bộ Megaficus. Nhập mật khẩu để mở.</p><input type="password" id="gp" placeholder="Mật khẩu" autocomplete="current-password" autofocus><button id="gb" type="submit">Mở báo cáo</button><div class="e" id="ge"></div></form></div><div class="wrap">
 <h1><span id="h1t">SEN TTS | Báo cáo tháng 10/2026</span> <span class="pill" id="top-pill">Dữ liệu cập nhật định kỳ</span></h1>
 <p class="note" id="top-note"></p>
-<div class="tabs" id="tabs" role="tablist"><button data-t="ov" class="on">Overview</button><button data-t="br">Business Report</button><button data-t="ap">Ads Performance</button><button data-t="ca">Channel Analytics</button></div>
+<div class="tabs" id="tabs" role="tablist"><button data-t="ov" class="on">Overview</button><button data-t="br">Business Report</button><button data-t="ap">Ads Performance</button><button data-t="ca">Channel Analytics</button><button data-t="dm">Demographics</button></div>
 <div id="tab-ov">
 <div class="card" id="flt" style="margin-top:10px;padding:12px 16px"><div class="hd" style="margin:0"><div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap"><b>Khoảng thời gian</b></div><div class="seg" id="f-pre"></div></div><p class="note" id="f-note" style="margin-bottom:0"></p></div>
 
@@ -92,7 +92,7 @@ td.ok{color:var(--ok)}td.bad{color:var(--bad)}td.roas-g{color:var(--ok);font-wei
 </div>
 <p class="note" style="margin-top:30px" id="foot"></p>
 </div>
-<div class="xtab" id="tab-br" hidden></div><div class="xtab" id="tab-ap" hidden></div><div class="xtab" id="tab-ca" hidden></div>
+<div class="xtab" id="tab-br" hidden></div><div class="xtab" id="tab-ap" hidden></div><div class="xtab" id="tab-ca" hidden></div><div class="xtab" id="tab-dm" hidden></div>
 </div><div id="tip"></div>
 <script>
 let P=null,PD=null,MONTHS=[],DI={};let curKey='';
@@ -209,7 +209,7 @@ function frameDoc(t){const X=XD,csv={};Object.values(X.maps[t]).forEach(n=>{csv[
  return '<!doctype html><html lang="vi"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>'+FONTS+X.css+'</style><script>'+esc(X.d3)+'<\/script><script>window.__CSV='+esc(JSON.stringify(csv))+';window.__MAP='+esc(JSON.stringify(X.maps[t]))+';window.__TAB='+JSON.stringify(t)+';<\/script><script>'+esc(X.shim)+'<\/script></head><body><div id="dash-root">'+X.pages[t]+'</div></body></html>'}
 async function openTab(t){
  document.querySelectorAll('#tabs button').forEach(b=>b.className=b.dataset.t===t?'on':'');
- $('tab-ov').hidden=t!=='ov';['br','ap','ca'].forEach(k=>{$('tab-'+k).hidden=t!==k});
+ $('tab-ov').hidden=t!=='ov';['br','ap','ca','dm'].forEach(k=>{$('tab-'+k).hidden=t!==k});
  if(t==='ov'){return}
  if(XF[t])return;XF[t]=1;const box=$('tab-'+t);box.replaceChildren(el('div','xmsg','Đang tải…'));
  try{if(!XD){if(!XP)XP=ungz(DI.X);XD=await XP}

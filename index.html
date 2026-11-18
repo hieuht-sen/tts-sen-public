@@ -40,16 +40,19 @@ td.ok{color:var(--ok)}td.bad{color:var(--bad)}td.roas-g{color:var(--ok);font-wei
 .apc .row{display:flex;justify-content:space-between;gap:8px;font-size:12px;color:var(--mut)}.apc .row b{color:var(--fg)}
 @media(max-width:640px){.wrap{padding:12px 16px 40px}h1{font-size:20px}}
 .tabs{display:flex;gap:6px;flex-wrap:wrap;margin:14px 0 4px;border-bottom:1px solid var(--line)}.tabs button{font:inherit;font-weight:600;font-size:14px;padding:9px 16px;border:1px solid transparent;border-bottom:0;border-radius:10px 10px 0 0;background:none;color:var(--mut);cursor:pointer;margin-bottom:-1px}.tabs button.on{color:var(--fg);background:var(--panel);border-color:var(--line)}.xtab iframe{width:100%;border:0;display:block;min-height:480px;background:transparent}.xtab .xmsg{padding:24px 0;color:var(--mut)}[hidden]{display:none!important}
+#edtbtn.on{background:var(--acc);color:#fff;border-color:var(--acc)}.editing{outline:2px dashed var(--acc);outline-offset:6px;border-radius:10px}.editing button{-webkit-user-modify:read-only}.editing [contenteditable="true"]:hover{outline:1px dashed var(--acc);outline-offset:1px;cursor:text}
 </style><style>html.lk body>*:not(#gate){display:none!important}#gate{position:fixed;inset:0;z-index:99999;display:flex;align-items:center;justify-content:center;background:#f7f7f5;color:#1c1c1a;font:14px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif}@media (prefers-color-scheme:dark){#gate{background:#161615;color:#ecebe6}}#gate form{width:min(380px,calc(100% - 32px));background:rgba(127,127,127,.08);border:1px solid rgba(127,127,127,.3);border-radius:14px;padding:28px 24px}#gate h1{font-size:18px;margin:0 0 4px}#gate p{margin:0 0 16px;opacity:.7;font-size:13px}#gate input{width:100%;padding:10px 12px;border:1px solid rgba(127,127,127,.4);border-radius:8px;background:transparent;color:inherit;font:inherit}#gate button{margin-top:12px;width:100%;padding:10px;border:0;border-radius:8px;background:#2563eb;color:#fff;font:inherit;font-weight:600;cursor:pointer}#gate button:disabled{opacity:.6}#gate .e{color:#dc2626;font-size:12px;min-height:18px;margin-top:8px}</style></head><body><div id="gate"><form id="gf"><h1>SEN TTS | Báo cáo dự án</h1><p>Nội bộ Megaficus. Nhập mật khẩu để mở.</p><input type="password" id="gp" placeholder="Mật khẩu" autocomplete="current-password" autofocus><button id="gb" type="submit">Mở báo cáo</button><div class="e" id="ge"></div></form></div><div class="wrap">
 <h1><span id="h1t">SEN TTS | Báo cáo tháng 10/2026</span> <span class="pill" id="top-pill">Dữ liệu cập nhật định kỳ</span></h1>
 <p class="note" id="top-note"></p>
 <div class="tabs" id="tabs" role="tablist"><button data-t="ov" class="on">Overview</button><button data-t="br">Business Report</button><button data-t="ap">Ads Performance</button><button data-t="ca">Channel Analytics</button><button data-t="dm">Demographics</button></div>
 <div id="tab-ov">
+<div class="hd" style="margin:10px 0 0"><span class="note" id="edt-hint" style="margin:0;display:none">Đang ở chế độ sửa — bấm vào đoạn text, tiêu đề hoặc ô bảng bên dưới để chỉnh trực tiếp. Không lưu lại khi tải lại trang hoặc đổi kỳ/tab.</span><button id="edtbtn" class="tgl" type="button" style="margin:0">✎ Sửa text</button></div>
 <div class="card" id="flt" style="margin-top:10px;padding:12px 16px"><div class="hd" style="margin:0"><div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap"><b>Khoảng thời gian</b></div><div class="seg" id="f-pre"></div></div><p class="note" id="f-note" style="margin-bottom:0"></p></div>
 
 <section class="sec" id="s0" style="margin-top:20px"><h2 id="h-ov">Overview · Tổng quan cả tháng 10</h2>
 <p id="take" style="max-width:85ch"></p>
 <div class="tiles" id="br-tiles"></div>
+<div class="card"><div class="hd"><h3>Total GMV, Total Ads Spend &amp; Lợi nhuận ròng theo thời gian</h3><div class="seg" data-k="ovc"></div></div><p class="note">Theo đúng kỳ đang chọn ở trên (Toàn kỳ hoặc từng tháng); đường dưới mốc 0 là lỗ.</p><div class="ch" id="ch-ov"></div><div class="leg" id="lg-ov"></div></div>
 </section>
 
 <section class="sec" id="s1"><h2>Section 1 · Business Report</h2>
@@ -97,7 +100,7 @@ let P=null,PD=null,MONTHS=[],DI={};let curKey='';
 const $=id=>document.getElementById(id);
 const el=(t,c,x)=>{const e=document.createElement(t);if(c)e.className=c;if(x!=null)e.textContent=x;return e};
 const GN={day:'Ngày',week:'Tuần',month:'Tháng'};
-const st={sh:'week',pl:'week',c0:'day',c3:'day',c4:'day',bt:'week',ap1:'day',ap2:'day',ap4:'day',prod:'all',ca1:'day',ca2:'day'};
+const st={sh:'week',pl:'week',c0:'day',c3:'day',c4:'day',ovc:'day',bt:'week',ap1:'day',ap2:'day',ap4:'day',prod:'all',ca1:'day',ca2:'day'};
 function table(t,d,twoRow){t.replaceChildren();const th=el('thead');
  if(twoRow){const r1=el('tr'),r2=el('tr');d.head.forEach((h,i)=>{const c=el('th','',h);if(i===0){c.rowSpan=2}else{c.colSpan=2;c.style.textAlign='center';c.style.borderLeft='1px solid var(--line)'}r1.appendChild(c)});
   d.head.slice(1).forEach(()=>{d.sub.forEach(s=>r2.appendChild(el('th','',s)))});th.append(r1,r2)}
@@ -107,8 +110,8 @@ const tip=$('tip');
 function showTip(ev,lines){tip.replaceChildren();lines.forEach((l,i)=>{const d=el('div');if(l&&l.c){const o=el('i');o.style.cssText='display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:6px;background:var(--'+l.c+')';d.append(o,l.t)}else{d.textContent=l;if(i===0)d.style.color='var(--mut)'}tip.appendChild(d)});tip.style.opacity=1;
  let x=ev.clientX+14,y=ev.clientY+14;if(x+tip.offsetWidth>innerWidth-8)x=ev.clientX-tip.offsetWidth-14;if(y+tip.offsetHeight>innerHeight-8)y=ev.clientY-tip.offsetHeight-14;tip.style.left=Math.max(4,x)+'px';tip.style.top=Math.max(4,y)+'px'}
 const hide=()=>{tip.style.opacity=0};
-const F={usd:v=>'$'+Math.round(v).toLocaleString('en-US'),usd2:v=>'$'+v.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2}),n:v=>Math.round(v).toLocaleString('en-US'),x:v=>v.toFixed(2),pct:v=>(v*100).toFixed(1)+'%'};
-const AX={usd:v=>'$'+(Math.abs(v)>=1000?(v/1000).toFixed(v%1000?1:0)+'k':v),usd2:v=>'$'+v,n:v=>Math.abs(v)>=1000?(v/1000)+'k':v,x:v=>v,pct:v=>Math.round(v*100)+'%'};
+const F={usd:v=>(v<0?'-$':'$')+Math.abs(Math.round(v)).toLocaleString('en-US'),usd2:v=>(v<0?'-$':'$')+Math.abs(v).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2}),n:v=>Math.round(v).toLocaleString('en-US'),x:v=>v.toFixed(2),pct:v=>(v*100).toFixed(1)+'%'};
+const AX={usd:v=>(v<0?'-$':'$')+(Math.abs(v)>=1000?(Math.abs(v)/1000).toFixed(v%1000?1:0)+'k':Math.abs(v)),usd2:v=>'$'+v,n:v=>Math.abs(v)>=1000?(v/1000)+'k':v,x:v=>v,pct:v=>Math.round(v*100)+'%'};
 const fin=v=>typeof v==='number'&&isFinite(v);
 function nice(max,n){if(max<=0)return[1,n];const r=max/n,m=Math.pow(10,Math.floor(Math.log10(r))),f=r/m,s=(f<=1?1:f<=2?2:f<=2.5?2.5:f<=5?5:10)*m;return[s*n,n]}
 function chart(box,leg,cfg,labels,ranges){
@@ -119,12 +122,15 @@ function chart(box,leg,cfg,labels,ranges){
  const bars=cfg.bars||[],lines=cfg.lines||[],N=labels.length;
  const isR=s=>s.axis==='r';
  let lmax=0,lmin=0,rmax=0;
- for(let i=0;i<N;i++){let p=0;bars.forEach(b=>{const v=b.v[i];if(!fin(v))return;if(isR(b))rmax=Math.max(rmax,v);else if(cfg.stack){p+=v;lmax=Math.max(lmax,p)}else lmax=Math.max(lmax,v)});
-  lines.forEach(s=>{const v=s.v[i];if(!fin(v))return;if(isR(s))rmax=Math.max(rmax,v);else lmax=Math.max(lmax,v)})}
- (cfg.refs||[]).forEach(r=>{lmax=Math.max(lmax,r.v)});
- const [LM,LN]=nice(lmax*1.05||1,5);const [RM,RN]=nice(rmax*1.05||1,5);
- const yL=v=>m.t+ih-v/LM*ih,yR=v=>m.t+ih-v/RM*ih;
- for(let k=0;k<=LN;k++){const v=LM/LN*k;S('line',{x1:m.l,x2:W-m.r,y1:yL(v),y2:yL(v),stroke:'var(--line)'});S('text',{x:m.l-6,y:yL(v)+4,'text-anchor':'end','font-size':10,fill:'var(--mut)'},(AX[cfg.lf]||AX.usd)(+v.toFixed(4)))}
+ for(let i=0;i<N;i++){let p=0;bars.forEach(b=>{const v=b.v[i];if(!fin(v))return;if(isR(b))rmax=Math.max(rmax,v);else if(cfg.stack){p+=v;lmax=Math.max(lmax,p)}else{lmax=Math.max(lmax,v);lmin=Math.min(lmin,v)}});
+  lines.forEach(s=>{const v=s.v[i];if(!fin(v))return;if(isR(s))rmax=Math.max(rmax,v);else{lmax=Math.max(lmax,v);lmin=Math.min(lmin,v)}})}
+ (cfg.refs||[]).forEach(r=>{lmax=Math.max(lmax,r.v);lmin=Math.min(lmin,r.v)});
+ let LM,LN,LO=0;
+ if(lmin<0){const sp=Math.max(lmax,-lmin)*1.05||1;const[ST]=nice(sp,5);const inc=ST/5;const hiT=Math.ceil((lmax*1.05||0)/inc)*inc,loT=Math.floor(lmin*1.05/inc)*inc;LO=loT;LM=hiT-loT;LN=Math.max(1,Math.round(LM/inc))}
+ else{[LM,LN]=nice(lmax*1.05||1,5)}
+ const [RM,RN]=nice(rmax*1.05||1,5);
+ const yL=v=>m.t+ih-(v-LO)/LM*ih,yR=v=>m.t+ih-v/RM*ih;
+ for(let k=0;k<=LN;k++){const v=LO+LM/LN*k;const z=LO<0&&Math.abs(v)<1e-6;S('line',{x1:m.l,x2:W-m.r,y1:yL(v),y2:yL(v),stroke:z?'var(--bad)':'var(--line)','stroke-width':z?1.5:1,'stroke-dasharray':z?'6 4':'0'});S('text',{x:m.l-6,y:yL(v)+4,'text-anchor':'end','font-size':10,'font-weight':z?700:400,fill:z?'var(--bad)':'var(--mut)'},(AX[cfg.lf]||AX.usd)(+v.toFixed(4)))}
  if(m.r>14)for(let k=0;k<=RN;k++){const v=RM/RN*k;S('text',{x:W-m.r+6,y:yR(v)+4,'font-size':10,fill:'var(--mut)'},(AX[cfg.rf]||AX.n)(+v.toFixed(4)))}
  const band=iw/N,cx=i=>m.l+band*(i+.5);
  const step=Math.max(1,Math.ceil(N/Math.max(2,Math.floor(iw/58))));
@@ -133,9 +139,9 @@ function chart(box,leg,cfg,labels,ranges){
  for(let i=0;i<N;i++){let p=0;let j=0;
   bars.forEach(b=>{const v=b.v[i];if(!fin(v)){j++;return}const y=isR(b)?yR:yL;let x0=m.l+band*i+band*.14;
    if(cfg.stack){const y0=y(p),y1=y(p+v);S('rect',{x:x0,y:y1,width:band*.72,height:Math.max(.5,y0-y1),fill:'var(--'+b.c+')',opacity:.92});p+=v}
-   else{S('rect',{x:x0+j*bw,y:y(v),width:Math.max(1,bw-1),height:Math.max(.5,y(0)-y(v)),fill:'var(--'+b.c+')',opacity:isR(b)?.55:.92});j++}})}
+   else{const y0=y(0),y1=y(v);S('rect',{x:x0+j*bw,y:Math.min(y0,y1),width:Math.max(1,bw-1),height:Math.max(.5,Math.abs(y0-y1)),fill:'var(--'+b.c+')',opacity:isR(b)?.55:.92});j++}})}
  (cfg.refs||[]).forEach(r=>{S('line',{x1:m.l,x2:W-m.r,y1:yL(r.v),y2:yL(r.v),stroke:'var(--'+r.c+')','stroke-width':1.5,'stroke-dasharray':'6 4'});S('text',{x:W-m.r-4,y:yL(r.v)-5,'text-anchor':'end','font-size':11,'font-weight':600,fill:'var(--'+r.c+')'},r.n)});
- lines.forEach(s=>{const y=isR(s)?yR:yL;let d='';s.v.forEach((v,i)=>{if(fin(v))d+=(d&&s._g!==i-1?'M':d?'L':'M')+cx(i).toFixed(1)+','+y(v).toFixed(1);});
+ lines.forEach(s=>{const y=isR(s)?yR:yL;
   let pts=[];s.v.forEach((v,i)=>{if(fin(v))pts.push((pts.length?'L':'M')+cx(i).toFixed(1)+','+y(v).toFixed(1))});
   S('path',{d:pts.join(''),fill:'none',stroke:'var(--'+s.c+')','stroke-width':2,'stroke-dasharray':s.dash?'5 3':'0'});
   if(N<=40)s.v.forEach((v,i)=>{if(fin(v))S('circle',{cx:cx(i),cy:y(v),r:2.6,fill:'var(--'+s.c+')'})})});
@@ -149,8 +155,16 @@ function chart(box,leg,cfg,labels,ranges){
  bars.concat(lines).forEach(s=>{const e=el('span');const i=el('i');i.style.background='var(--'+s.c+')';if(lines.includes(s))i.style.height='3px';e.append(i,s.n+(isR(s)?' (trục phải)':''));leg.appendChild(e)})}
 function seg(k,cb){const c=document.querySelector('.seg[data-k="'+k+'"]');c.replaceChildren();['day','week','month'].forEach(g=>{const b=el('button','',GN[g]);if(st[k]===g)b.className='on';b.onclick=()=>{st[k]=g;c.querySelectorAll('button').forEach(x=>x.className='');b.className='on';cb()};c.appendChild(b)})}
 function tiles(box,arr){box.replaceChildren();arr.forEach(t=>{const d=el('div','tile');d.appendChild(el('span','l',t.l));d.appendChild(el('b',t.bad?'bad':(t.vc||''),t.v));if(t.d!=null)d.appendChild(el('span','d '+(t.dc||''),t.d));if(t.s)d.appendChild(el('span','s',t.s));if(t.prev)d.appendChild(el('span','s',t.prev));box.appendChild(d)})}
-function tgls(){const col=window.__col=window.__col||{};document.querySelectorAll('.tgl').forEach(b=>b.remove());
- ['t-ap1','t-ap2','t-ca1','t-ca2'].forEach(id=>{const sc=$(id).parentNode;const b=el('button','tgl');const set=()=>{sc.style.display=col[id]?'none':'';b.textContent=col[id]?'Mở rộng bảng ▸':'Thu gọn bảng ▾'};set();b.onclick=()=>{col[id]=!col[id];set()};sc.parentNode.insertBefore(b,sc)})}
+let EDIT=false;
+function applyEditGuard(){if(!EDIT)return;const root=$('tab-ov');root.querySelectorAll('button,select,input').forEach(b=>{b.contentEditable='false'})}
+function setEdit(v){EDIT=v;const root=$('tab-ov');root.contentEditable=v?'true':'false';
+ applyEditGuard();
+ const b=$('edtbtn');b.textContent=v?'✓ Xong':'✎ Sửa text';b.classList.toggle('on',v);
+ $('edt-hint').style.display=v?'':'none';root.classList.toggle('editing',v)}
+$('edtbtn').onclick=()=>setEdit(!EDIT);
+function tgls(){const col=window.__col=window.__col||{};document.querySelectorAll('.card .tgl').forEach(b=>b.remove());
+ ['t-ap1','t-ap2','t-ca1','t-ca2'].forEach(id=>{const sc=$(id).parentNode;const b=el('button','tgl');const set=()=>{sc.style.display=col[id]?'none':'';b.textContent=col[id]?'Mở rộng bảng ▸':'Thu gọn bảng ▾'};set();b.onclick=()=>{col[id]=!col[id];set()};sc.parentNode.insertBefore(b,sc)})
+ applyEditGuard()}
 function init(){
  $('take').textContent=P.take;
  const M=P.meta;$('h1t').textContent=M.single?'SEN TTS | Báo cáo tháng '+M.frm.slice(3,5).replace(/^0/,'')+'/'+M.frm.slice(6):'SEN TTS | Báo cáo '+M.frm+' → '+M.to;document.title="[TTS] SEN";
@@ -162,7 +176,7 @@ function init(){
  tiles($('br-tiles'),P.br_tiles);$('br-cap').textContent=P.br_cap;tiles($('br-kpi'),P.br_kpi);
  const shr=()=>table($('t-sh'),P.SH[st.sh],true),plr=()=>table($('t-pl'),P.PL[st.pl]);
  seg('sh',shr);seg('pl',plr);shr();plr();
- [['c0','b0'],['c3','b3'],['c4','b4']].forEach(([k,b])=>{const r=()=>{const g=st[k],c=P.BRCH[g];chart($('ch-'+b),$('lg-'+b),c[b],c.labels,c.ranges)};seg(k,r);r()});
+ [['ovc','ov'],['c0','b0'],['c3','b3'],['c4','b4']].forEach(([k,b])=>{const r=()=>{const g=st[k],c=P.BRCH[g];chart($('ch-'+b),$('lg-'+b),c[b],c.labels,c.ranges)};seg(k,r);r()});
  table($('t-mom'),P.MOM);const btr=()=>table($('t-bt'),P.BTAB[st.bt]);seg('bt',btr);btr();
  $('bt-note').textContent='Hoàn tiền, hủy và Net sales chỉ có cho kỳ đã settle (đến '+P.asof.lastset+'); kỳ sau hiển thị "chưa đủ dữ liệu". Kỳ có * chưa đủ ngày. Cột % so kỳ trước của tháng so với cả kỳ trước.';
  // AP

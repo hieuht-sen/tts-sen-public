@@ -39,17 +39,20 @@ td.ok{color:var(--ok)}td.bad{color:var(--bad)}td.roas-g{color:var(--ok);font-wei
 .apc{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px;display:flex;flex-direction:column;gap:4px}
 .apc .row{display:flex;justify-content:space-between;gap:8px;font-size:12px;color:var(--mut)}.apc .row b{color:var(--fg)}
 @media(max-width:640px){.wrap{padding:12px 16px 40px}h1{font-size:20px}}
+.tabs{display:flex;gap:6px;flex-wrap:wrap;margin:14px 0 4px;border-bottom:1px solid var(--line)}.tabs button{font:inherit;font-weight:600;font-size:14px;padding:9px 16px;border:1px solid transparent;border-bottom:0;border-radius:10px 10px 0 0;background:none;color:var(--mut);cursor:pointer;margin-bottom:-1px}.tabs button.on{color:var(--fg);background:var(--panel);border-color:var(--line)}.xtab iframe{width:100%;border:0;display:block;min-height:480px;background:transparent}.xtab .xmsg{padding:24px 0;color:var(--mut)}[hidden]{display:none!important}
 </style><style>html.lk body>*:not(#gate){display:none!important}#gate{position:fixed;inset:0;z-index:99999;display:flex;align-items:center;justify-content:center;background:#f7f7f5;color:#1c1c1a;font:14px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif}@media (prefers-color-scheme:dark){#gate{background:#161615;color:#ecebe6}}#gate form{width:min(380px,calc(100% - 32px));background:rgba(127,127,127,.08);border:1px solid rgba(127,127,127,.3);border-radius:14px;padding:28px 24px}#gate h1{font-size:18px;margin:0 0 4px}#gate p{margin:0 0 16px;opacity:.7;font-size:13px}#gate input{width:100%;padding:10px 12px;border:1px solid rgba(127,127,127,.4);border-radius:8px;background:transparent;color:inherit;font:inherit}#gate button{margin-top:12px;width:100%;padding:10px;border:0;border-radius:8px;background:#2563eb;color:#fff;font:inherit;font-weight:600;cursor:pointer}#gate button:disabled{opacity:.6}#gate .e{color:#dc2626;font-size:12px;min-height:18px;margin-top:8px}</style></head><body><div id="gate"><form id="gf"><h1>SEN TTS | Báo cáo dự án</h1><p>Nội bộ Megaficus. Nhập mật khẩu để mở.</p><input type="password" id="gp" placeholder="Mật khẩu" autocomplete="current-password" autofocus><button id="gb" type="submit">Mở báo cáo</button><div class="e" id="ge"></div></form></div><div class="wrap">
 <h1><span id="h1t">SEN TTS | Báo cáo tháng 10/2026</span> <span class="pill" id="top-pill">Dữ liệu cập nhật định kỳ</span></h1>
 <p class="note" id="top-note"></p>
+<div class="tabs" id="tabs" role="tablist"><button data-t="ov" class="on">Overview</button><button data-t="br">Business Report</button><button data-t="ap">Ads Performance</button><button data-t="ca">Channel Analytics</button></div>
+<div id="tab-ov">
 <div class="card" id="flt" style="margin-top:10px;padding:12px 16px"><div class="hd" style="margin:0"><div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap"><b>Khoảng thời gian</b></div><div class="seg" id="f-pre"></div></div><p class="note" id="f-note" style="margin-bottom:0"></p></div>
-<nav class="nav"><a href="#s0">Overview</a><a href="#s1">1. Business Report</a><a href="#s2">2. Ads Performance</a><a href="#s3">3. Channel Analytics</a></nav>
 
 <section class="sec" id="s0" style="margin-top:20px"><h2 id="h-ov">Overview · Tổng quan cả tháng 10</h2>
 <p id="take" style="max-width:85ch"></p>
 <div class="tiles" id="br-tiles"></div>
 </section>
 
+<div id="ov-legacy" hidden>
 <section class="sec" id="s1"><h2>Section 1 · Business Report</h2>
 <div class="card"><div class="hd"><h3>Chỉ số chính của Business Performance</h3></div><p class="note" id="br-cap"></p><div class="tiles" id="br-kpi" style="margin-top:6px"></div></div>
 <div class="card"><div class="hd"><h3>Báo cáo tình hình kinh doanh</h3><div class="seg" data-k="sh"></div></div><div class="scroll"><table id="t-sh"></table></div>
@@ -86,7 +89,10 @@ td.ok{color:var(--ok)}td.bad{color:var(--bad)}td.roas-g{color:var(--ok);font-wei
 <p class="note">GMV theo kênh (Product analytics, 3 SKU) chưa gồm TikTok co-funding nên bằng GMV không co-funding của Shop Analytics. Tuần bắt đầu thứ Hai; tuần đầu chỉ tính từ ngày đầu kỳ.</p></div>
 <div class="card"><div class="hd"><h3>Ads Spend vs GMV</h3><div class="seg" data-k="ca2"></div></div><div class="ch" id="ch-ca2"></div><div class="leg" id="lg-ca2"></div><div class="scroll"><table id="t-ca2"></table></div></div>
 </section>
+</div>
 <p class="note" style="margin-top:30px" id="foot"></p>
+</div>
+<div class="xtab" id="tab-br" hidden></div><div class="xtab" id="tab-ap" hidden></div><div class="xtab" id="tab-ca" hidden></div>
 </div><div id="tip"></div>
 <script>
 let P=null,PD=null,MONTHS=[],DI={};let curKey='';
@@ -195,6 +201,22 @@ function startApp(D){PD=D.PD;MONTHS=D.months;DI=D;const pre=$('f-pre');pre.repla
  [['Toàn kỳ','all']].concat(MONTHS.map(m=>[m.lab,m.k])).forEach(([n,k])=>{const x=el('button','',n);x.dataset.k=k;x.onclick=()=>showKey(k);pre.appendChild(x)});
  $('top-pill').textContent='Dữ liệu đến '+dmyS(D.dataEnd);
  showKey(MONTHS[MONTHS.length-1].k)}
+
+let XD=null,XP=null;const XF={};
+const FONTS="@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap');";
+const esc=x=>x.replace(/<\/(script)/gi,'<\\/$1');
+function frameDoc(t){const X=XD,csv={};Object.values(X.maps[t]).forEach(n=>{csv[n]=X.csv[n]});
+ return '<!doctype html><html lang="vi"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>'+FONTS+X.css+'</style><script>'+esc(X.d3)+'<\/script><script>window.__CSV='+esc(JSON.stringify(csv))+';window.__MAP='+esc(JSON.stringify(X.maps[t]))+';window.__TAB='+JSON.stringify(t)+';<\/script><script>'+esc(X.shim)+'<\/script></head><body><div id="dash-root">'+X.pages[t]+'</div></body></html>'}
+async function openTab(t){
+ document.querySelectorAll('#tabs button').forEach(b=>b.className=b.dataset.t===t?'on':'');
+ $('tab-ov').hidden=t!=='ov';['br','ap','ca'].forEach(k=>{$('tab-'+k).hidden=t!==k});
+ if(t==='ov'){return}
+ if(XF[t])return;XF[t]=1;const box=$('tab-'+t);box.replaceChildren(el('div','xmsg','Đang tải…'));
+ try{if(!XD){if(!XP)XP=ungz(DI.X);XD=await XP}
+  const f=document.createElement('iframe');f.title=t;f.srcdoc=frameDoc(t);f.addEventListener('load',()=>{const m=box.querySelector('.xmsg');if(m)m.remove()});box.appendChild(f)}
+ catch(e){box.replaceChildren(el('div','xmsg','Không dựng được tab này ('+(e&&e.message?e.message:e)+').'));XF[t]=0}}
+addEventListener('message',ev=>{const d=ev.data;if(!d||d.tts!=='h'||!d.tab)return;const f=document.querySelector('#tab-'+d.tab+' iframe');if(f&&d.h>0&&f.contentWindow===ev.source)f.style.height=(d.h+8)+'px'});
+document.getElementById('tabs').addEventListener('click',ev=>{const b=ev.target.closest('button');if(b)openTab(b.dataset.t)});
 let rt;const u8=s=>Uint8Array.from(atob(s),c=>c.charCodeAt(0));
 document.getElementById('gf').onsubmit=async ev=>{ev.preventDefault();const b=document.getElementById('gb'),e=document.getElementById('ge');e.textContent='';
  if(!(window.crypto&&crypto.subtle)){e.textContent='Trình duyệt không hỗ trợ giải mã. Hãy mở bằng Chrome, Edge hoặc Safari qua đường dẫn https.';return}

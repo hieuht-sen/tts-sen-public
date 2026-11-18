@@ -23,6 +23,7 @@ h1{font-size:24px;margin:0 0 4px;letter-spacing:-.01em}h2{font-size:18px;margin:
 .seg button+button{border-left:1px solid var(--line)}.seg button.on{background:var(--acc);color:#fff}
 .hd{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:8px}
 .tgl{font:inherit;font-size:12px;margin-top:8px;padding:4px 12px;border:1px solid var(--line);border-radius:8px;background:transparent;color:var(--fg);cursor:pointer}.scroll{overflow:auto;border:1px solid var(--line);border-radius:8px;margin-top:8px}
+.dr{display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--mut)}.dr input[type=date]{font:inherit;font-size:12.5px;padding:4px 8px;border:1px solid var(--line);border-radius:8px;background:var(--panel);color:var(--fg)}.dr button{font:inherit;font-size:12px;padding:4px 12px;border:1px solid var(--line);border-radius:8px;background:transparent;color:var(--fg);cursor:pointer}.dr button:disabled{opacity:.6;cursor:default}
 table{border-collapse:collapse;width:100%;font-size:12.5px;font-variant-numeric:tabular-nums}
 th,td{padding:6px 10px;border-bottom:1px solid var(--line);text-align:right;white-space:nowrap}
 th{position:sticky;top:0;background:var(--panel);color:var(--mut);font-weight:600;z-index:2}
@@ -47,7 +48,7 @@ td.ok{color:var(--ok)}td.bad{color:var(--bad)}td.roas-g{color:var(--ok);font-wei
 <div class="tabs" id="tabs" role="tablist"><button data-t="ov" class="on">Overview</button><button data-t="br">Business Report</button><button data-t="ap">Ads Performance</button><button data-t="ca">Channel Analytics</button><button data-t="dm">Demographics</button></div>
 <div id="tab-ov">
 <div class="hd" style="margin:10px 0 0"><span class="note" id="edt-hint" style="margin:0;display:none">Đang ở chế độ sửa — bấm vào đoạn text, tiêu đề hoặc ô bảng bên dưới để chỉnh trực tiếp. Không lưu lại khi tải lại trang hoặc đổi kỳ/tab.</span><button id="edtbtn" class="tgl" type="button" style="margin:0">✎ Sửa text</button></div>
-<div class="card" id="flt" style="margin-top:10px;padding:12px 16px"><div class="hd" style="margin:0"><div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap"><b>Khoảng thời gian</b></div><div class="seg" id="f-pre"></div></div><p class="note" id="f-note" style="margin-bottom:0"></p></div>
+<div class="card" id="flt" style="margin-top:10px;padding:12px 16px"><div class="hd" style="margin:0"><div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap"><b>Khoảng thời gian</b></div><div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap"><div class="seg" id="f-pre"></div><form class="dr" id="f-custom">Tùy chọn: <input type="date" id="f-from" required> → <input type="date" id="f-to" required><button type="submit" id="f-go">Xem</button></form></div></div><p class="note" id="f-note" style="margin-bottom:0"></p></div>
 
 <section class="sec" id="s0" style="margin-top:20px"><h2 id="h-ov">Overview · Tổng quan cả tháng 10</h2>
 <p id="take" style="max-width:85ch"></p>
@@ -95,6 +96,734 @@ td.ok{color:var(--ok)}td.bad{color:var(--bad)}td.roas-g{color:var(--ok);font-wei
 </div>
 <div class="xtab" id="tab-br" hidden></div><div class="xtab" id="tab-ap" hidden></div><div class="xtab" id="tab-ca" hidden></div><div class="xtab" id="tab-dm" hidden></div>
 </div><div id="tip"></div>
+<script>(function(){
+'use strict';
+/* Faithful JS port of tools/model.py + tools/build_data.py, parameterized by FROM/TO.
+   Mirrors Python line-by-line; comments reference the Python function names. */
+
+function csvParse(text){
+  if(text.charCodeAt(0)===0xFEFF)text=text.slice(1);
+  var rows=[],row=[],f='',q=false,i=0,n=text.length,c;
+  for(;i<n;i++){c=text[i];
+    if(q){if(c==='"'){if(text[i+1]==='"'){f+='"';i++}else q=false}else f+=c}
+    else if(c==='"')q=true;
+    else if(c===','){row.push(f);f=''}
+    else if(c==='\n'){row.push(f);rows.push(row);row=[];f=''}
+    else if(c!=='\r')f+=c;
+  }
+  if(f!==''||row.length){row.push(f);rows.push(row)}
+  var cols=rows.shift()||[];
+  var out=[];
+  rows.forEach(function(r){
+    if(r.length===1&&r[0]==='')return;
+    var o={};for(var j=0;j<cols.length;j++){var v=r[j];o[cols[j]]=(v===undefined||v==='')?null:v}
+    out.push(o);
+  });
+  return out;
+}
+function N(x){var v=parseFloat(x);return isFinite(v)?v:0}
+function addD(d,n){var t=new Date(d+'T00:00:00Z').getTime()+n*86400000;return isNaN(t)?'':new Date(t).toISOString().slice(0,10)}
+function diffD(a,b){return Math.round((new Date(a+'T00:00:00Z').getTime()-new Date(b+'T00:00:00Z').getTime())/86400000)}
+const MCF=7.5,LANDED=4.5;
+const COLS=['sale_orders','canceled','sample_orders','refundable_sample','sale_fbt','sale_mcf','sample_fbt','sample_mcf','units_sale','units_sample','gmv_customer','settled_orders','gross_sales','seller_discount','net_sales','referral_fee','affiliate_commission','promo_fee','refund_fees','fbt_fee_sale','fbt_fee_sample','shipping_other','settlement_sale','settlement_sample','unsettled_orders','unsettled_gmv','refund_amount'];
+
+/* ============ ENGINE (model.py module-level, range-independent) ============ */
+function buildEngine(csv, consts){
+  const orders=csvParse(csv.orders_daily), ads=csvParse(csv.ads_daily), shop=csvParse(csv.shop_gmv_daily),
+    adj=csvParse(csv.adjustments), fbt=csvParse(csv.fbt_orders), onh=csvParse(csv.onhold),
+    apd=csvParse(csv.an_product_daily), pcd=csvParse(csv.product_channel_daily), settle=csvParse(csv.settle_daily);
+  const VAF=consts.VAF,VSO=consts.VSO,AFC=consts.AFC,SMP=consts.SMP;
+  const om={},am={},jm={};
+  orders.forEach(r=>om[r.date]=r); ads.forEach(r=>am[r.date]=r);
+  adj.forEach(r=>{const x=jm[r.date]=jm[r.date]||{s:0,o:0};x.s+=N(r.storage_fee);x.o+=N(r.other_adjustment)});
+  const AMD={}; ads.forEach(r=>{const v=N(r.ads_manager_spend); if(v>0)AMD[r.date]=v});
+  const dates=Object.keys(om); const end=dates.sort()[dates.length-1];
+  const DAILY=[]; const STD=[]; let k='2026-06-01';
+  while(k<=end){
+    const r=om[k]||{}, ad=am[k]||{}, aj=jm[k]||{s:0,o:0};
+    const row={date:k}; COLS.forEach(c=>row[c]=N(r[c]));
+    row.ads_spend=N(ad.spend); row.ads_orders=N(ad.orders); row.ads_roi=N(ad.roi);
+    row.storage_fee=aj.s; row.other_adjustment=aj.o; row.stor_est=0; row.storage_est=0;
+    if(!jm[k]){
+      const kd=new Date(k+'T00:00:00Z').getTime();
+      const pk=STD.filter(x=>(kd-x.t)/86400000<=14 && x.t<kd);
+      if(pk.length>=3){const l=pk.slice(-3); row.storage_est=l.reduce((a,x)=>a+x.v,0)/3; row.stor_est=1}
+    }
+    if(jm[k]&&aj.s) STD.push({t:new Date(k+'T00:00:00Z').getTime(),v:aj.s});
+    row.e_ref=row.e_aff=row.e_promo=row.e_fbt=row.e_tot=0;
+    DAILY.push(row); k=addD(k,1);
+  }
+  const DM={}; DAILY.forEach(r=>DM[r.date]=r);
+  const SGM={}; shop.forEach(r=>{SGM[r.date]={gmvC:N(r.gmv_with_cofunding),gmvX:N(r.gmv),orders:N(r.main_order_cnt),items:N(r.item_sold_cnt),sku:N(r.sku_order_cnt),refund:N(r.refund_amount),visitor:N(r.product_page_visitor_cnt)}});
+  const SM={}; settle.forEach(r=>{const x=SM[r.stmt_date]=SM[r.stmt_date]||{settle:0,pend:0}; x.settle+=N(r.settlement); x.pend+=N(r.pending)});
+  let LASTSET=''; DAILY.forEach(r=>{if(r.settled_orders>0 && r.date>LASTSET) LASTSET=r.date});
+  // PDM
+  const PDM={};
+  apd.forEach(r=>{
+    const q=PDM[r.date]=PDM[r.date]||{selfV:0,affV:0,card:0,live:0,cancel:0};
+    q.selfV+=N(r.self_video_gmv); q.affV+=N(r.affiliate_gmv)-N(r.affiliate_live_gmv); q.card+=N(r.product_card_gmv); q.live+=N(r.self_live_gmv)+N(r.affiliate_live_gmv); q.cancel+=N(r.items_canceled_and_returned);
+  });
+  const CM={seller_video:'selfV',affiliate:'affV',product_card:'card',seller_live:'live'};
+  const have=new Set(Object.keys(PDM));
+  pcd.forEach(r=>{
+    if(have.has(r.date) || !CM[r.channel]) return;
+    const q=PDM[r.date]=PDM[r.date]||{selfV:0,affV:0,card:0,live:0,cancel:0}; q[CM[r.channel]]+=N(r.gmv);
+  });
+  // estDaily
+  (function estDaily(){
+    const last=DAILY[DAILY.length-1].date; const s60=addD(last,-60);
+    const W=DAILY.filter(r=>r.date>s60 && r.net_sales>0);
+    const rf=W.reduce((a,r)=>a-r.referral_fee,0), af=W.reduce((a,r)=>a-r.affiliate_commission,0), pm=W.reduce((a,r)=>a-r.promo_fee,0);
+    const sm=(rf+af+pm)||1;
+    const fU={};
+    fbt.forEach(r=>{const u=parseInt(N(r.units))||1; const z=fU[u]=fU[u]||{n:0,s:0}; z.n++; z.s+=-N(r.fbt_fee)});
+    const feeFor=u=>{const x=fU[u]||fU[1]; return (x&&x.n)?x.s/x.n:4.5};
+    const oh=onh; const cnt={};
+    oh.forEach(o=>{if(N(o.est_net_sales)>0) cnt[o.created]=(cnt[o.created]||0)+1});
+    const covN={},covE={},covF={};
+    oh.forEach(o=>{
+      if(!(N(o.est_net_sales)>0)) return;
+      const r=DM[o.created];
+      if(!r || !(r.unsettled_orders>0)) return;
+      const kk=Math.min(1, r.unsettled_orders/cnt[o.created]); const E=-N(o.est_fees)*kk; const u=(o.sku==='X2')?2:1; const f=feeFor(u)*kk;
+      covN[o.created]=(covN[o.created]||0)+kk; covE[o.created]=(covE[o.created]||0)+E; covF[o.created]=(covF[o.created]||0)+f;
+      r.e_ref+=E*rf/sm; r.e_aff+=E*af/sm; r.e_promo+=E*pm/sm; r.e_fbt+=f; r.e_tot+=E+f;
+    });
+    let sE=0,sF=0,sG=0;
+    Object.keys(covN).forEach(d=>{
+      const r=DM[d];
+      if(!r || !(r.unsettled_orders>0)) return;
+      const kk=Math.min(1, covN[d]/r.unsettled_orders); sE+=covE[d]; sF+=covF[d]; sG+=r.unsettled_gmv*kk;
+    });
+    const rateE=sG>0?sE/sG:0, rateF=sG>0?sF/sG:0;
+    if(rateE>0){
+      DAILY.forEach(r=>{
+        const un=r.unsettled_orders;
+        if(!(un>0)) return;
+        const rem=un-(covN[r.date]||0);
+        if(rem<0.001) return;
+        const sh=rem/un; const E=rateE*r.unsettled_gmv*sh; const f=rateF*r.unsettled_gmv*sh;
+        r.e_ref+=E*rf/sm; r.e_aff+=E*af/sm; r.e_promo+=E*pm/sm; r.e_fbt+=f; r.e_tot+=E+f;
+      });
+    }
+    const nsW=W.reduce((a,r)=>a+r.net_sales,0)||1; const rE=(rf+af+pm)/nsW;
+    DAILY.forEach(r=>{
+      if(r.e_tot>0.005 || r.net_sales>0.005 || r.unsettled_orders>0) return;
+      const u=r.units_sale;
+      if(!(u>0) || !(r.sale_orders>0)) return;
+      const E=rE*r.gmv_customer; const f=feeFor(1)*u;
+      r.e_ref+=E*rf/sm; r.e_aff+=E*af/sm; r.e_promo+=E*pm/sm; r.e_fbt+=f; r.e_tot+=E+f;
+    });
+  })();
+  return {DAILY,DM,SGM,SM,LASTSET,PDM,AMD,VAF,VSO,AFC,SMP,ads,shop,pcd,apd};
+}
+
+function weekStart(d){const dd=parseInt(d.slice(8,10));const st=Math.min(29,Math.floor((dd-1)/7)*7+1);return d.slice(0,8)+String(st).padStart(2,'0')}
+function gk(g){return g==='day'?(d=>d):g==='week'?weekStart:(d=>d.slice(0,7))}
+function zero(){return {orders:0,samples:0,units_sale:0,units_sample:0,gmv_all:0,gmv:0,gross:0,sdisc:0,net:0,referral:0,affiliate:0,promo:0,refundfees:0,fbt_sale:0,ship_other:0,settle:0,mcf_sale_n:0,mcf_sample_n:0,fbt_sample:0,est:0,gmvc:0,items:0,ads:0,adsm:0,ads_orders:0,storage:0,est_stor:0,other_adj:0,canceled:0,unsettled:0,unsettled_gmv:0,sale_fbt:0,sample_fbt_n:0,ndays:0}}
+function mkAdd(E){return function add(t,r){
+  t.orders+=r.sale_orders;t.samples+=r.sample_orders;t.units_sale+=r.units_sale;t.units_sample+=r.units_sample;
+  t.gmv_all+=r.gmv_customer;t.gmv+=r.gmv_customer-r.unsettled_gmv;t.gross+=r.gross_sales;t.sdisc+=r.seller_discount;t.net+=r.net_sales;
+  t.referral+=-r.referral_fee;t.affiliate+=-r.affiliate_commission;t.promo+=-r.promo_fee;t.refundfees+=-r.refund_fees;
+  t.fbt_sale+=-r.fbt_fee_sale;t.ship_other+=r.shipping_other;t.settle+=r.settlement_sale;
+  if(r.e_tot){t.referral+=r.e_ref;t.affiliate+=r.e_aff;t.promo+=r.e_promo;t.fbt_sale+=r.e_fbt;t.settle-=r.e_tot;t.est+=r.e_tot}
+  t.mcf_sale_n+=r.sale_mcf;t.mcf_sample_n+=r.sample_mcf;t.fbt_sample+=-r.fbt_fee_sample;
+  t.ads+=r.ads_spend;t.adsm+=(E.AMD[r.date]||0);t.ads_orders+=r.ads_orders;t.storage+=-r.storage_fee;
+  if(r.stor_est){t.storage+=-r.storage_est;t.est_stor+=-r.storage_est}
+  t.other_adj+=r.other_adjustment;t.canceled+=r.canceled;t.unsettled+=r.unsettled_orders;t.unsettled_gmv+=r.unsettled_gmv;
+  const g=E.SGM[r.date]; t.gmvc+=g?g.gmvC:r.net_sales; t.items+=g?g.items:r.units_sale;
+  t.sale_fbt+=r.sale_fbt;t.sample_fbt_n+=r.sample_fbt;t.ndays++;
+}}
+function fin_(t){
+  t.cofund=Math.max(0,t.net-t.gmv);t.landed_sale=t.units_sale*LANDED;t.mcf_sale=t.mcf_sale_n*MCF;t.rev=t.gmvc;
+  t.gross_profit=t.gmvc+(t.settle-t.net)-t.landed_sale-t.mcf_sale;
+  t.landed_sample=t.units_sample*LANDED;t.mcf_sample=t.mcf_sample_n*MCF;t.sample_cost=t.landed_sample+t.mcf_sample+t.fbt_sample;
+  t.after_sample=t.gross_profit-t.sample_cost;t.net_profit=t.after_sample-t.ads-t.adsm-t.storage+t.other_adj;
+  t.platform_fees=t.referral+t.affiliate+t.promo+t.refundfees;
+  return t;
+}
+function mkSfCompute(E){
+  const add=mkAdd(E);
+  return function sfCompute(start,end,group){
+    group=group||'month';
+    const R=E.DAILY.filter(r=>start<=r.date && r.date<=end); const f=gk(group);
+    const T=zero(); R.forEach(r=>add(T,r)); fin_(T);
+    const M={};
+    R.forEach(r=>{const k=f(r.date); add(M[k]=M[k]||zero(), r)});
+    const months=Object.keys(M).sort().map(k=>Object.assign({month:k},fin_(M[k])));
+    return [T,months];
+  };
+}
+function mkAgg(E){
+  return function agg(s,e){
+    const m={adsGmv:0,gmvC:0,gmvX:0,orders:0,items:0,refund:0,ads:0,adsm:0,net:0,canc:0,sale:0,fees:0,settle:0,pend:0,days:0};
+    let d=s;
+    while(d<=e){
+      m.days++; const g=E.SGM[d], r=E.DM[d], c=E.SM[d];
+      if(g){m.gmvC+=g.gmvC;m.gmvX+=g.gmvX;m.orders+=g.orders;m.items+=g.items;m.refund+=g.refund}
+      if(r){
+        m.ads+=r.ads_spend;m.adsGmv+=r.ads_roi*r.ads_spend;m.net+=r.net_sales;m.canc+=r.canceled;m.sale+=r.sale_orders;
+        m.fees+=-(r.referral_fee+r.affiliate_commission+r.promo_fee+r.refund_fees+r.fbt_fee_sale);
+      }
+      if(c){m.settle+=c.settle;m.pend+=c.pend}
+      m.adsm+=(E.AMD[d]||0); d=addD(d,1);
+    }
+    m.cof=m.gmvC-m.gmvX; m.ratio=m.gmvC?m.cof/m.gmvC:NaN; m.aov=m.items?m.gmvC/m.items:0;
+    m.adsT=m.ads+m.adsm; m.tacos=m.gmvC?m.adsT/m.gmvC:0;
+    m.refR=m.gmvC?m.refund/m.gmvC:NaN; m.canR=(m.sale+m.canc)?m.canc/(m.sale+m.canc):NaN;
+    m.ncf=m.settle-m.adsT; return m;
+  };
+}
+function mkShAgg(E){
+  return function shAgg(s,e){
+    const a={gmvC:0,gmvX:0,gmvXpd:0,pdMiss:'',selfV:0,affV:0,card:0,live:0,refund:0,cancel:0,orders:0,items:0,ads:0,adsOrders:0,adsItems:0,sample:0,aff:0,adsGmv:0,adsm:0,vaf:0,vso:0,afb:0,afs:0,sl:0,se:0,s:s};
+    let d=s;
+    while(d<=e){
+      const g=E.SGM[d], r=E.DM[d], q=E.PDM[d];
+      a.adsm+=(E.AMD[d]||0);
+      if(E.SMP[d]){a.sl+=E.SMP[d][0];a.se+=E.SMP[d][1]}
+      if(E.AFC[d]){a.afb+=E.AFC[d][0];a.afs+=E.AFC[d][1]}
+      a.vaf+=(E.VAF[d]||0);a.vso+=(E.VSO[d]||0);
+      if(g){a.gmvC+=g.gmvC;a.gmvX+=g.gmvX;a.orders+=g.orders;a.items+=g.items;a.refund+=g.refund}
+      if(r){
+        a.ads+=r.ads_spend;a.adsOrders+=r.ads_orders;
+        a.adsItems+=g?Math.min(g.items, r.ads_orders*(g.sku>0?(g.items/g.sku):1)):r.ads_orders;
+        a.sample+=r.sample_orders;a.aff+=-r.affiliate_commission;a.adsGmv+=r.ads_roi*r.ads_spend;
+      }
+      if(q){
+        ['selfV','affV','card','live','cancel'].forEach(kk=>a[kk]+=q[kk]);
+        if(g) a.gmvXpd+=g.gmvX;
+      } else if(g && g.gmvX>0){ a.pdMiss=a.pdMiss||d; }
+      d=addD(d,1);
+    }
+    a.cof=a.gmvC-a.gmvX; return a;
+  };
+}
+function bstart(k,g){return (g==='day'||g==='week')?k:k+'-01'}
+function bend(k,g){
+  const s=bstart(k,g);
+  if(g==='day') return s;
+  if(g==='week'){
+    if(parseInt(s.slice(8,10))>=29){
+      const y=parseInt(s.slice(0,4)),m=parseInt(s.slice(5,7));
+      const nxt=new Date(Date.UTC(y+(m===12?1:0), m===12?0:m, 1));
+      return new Date(nxt.getTime()-86400000).toISOString().slice(0,10);
+    }
+    return addD(s,6);
+  }
+  const y=parseInt(s.slice(0,4)),m=parseInt(s.slice(5,7));
+  const nxt=new Date(Date.UTC(y+(m===12?1:0), m===12?0:m, 1));
+  return new Date(nxt.getTime()-86400000).toISOString().slice(0,10);
+}
+function bkey(d,g){return g==='day'?d:g==='week'?weekStart(d):d.slice(0,7)}
+const MS=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+function wlabel(k){return MS[parseInt(k.slice(5,7))-1]+' W'+(Math.floor((parseInt(k.slice(8,10))-1)/7)+1)}
+function dm(d){return d.slice(8)+'/'+d.slice(5,7)}
+function dmy(d){return d.slice(8)+'/'+d.slice(5,7)+'/'+d.slice(0,4)}
+function blabel(k,g){return g==='day'?k.slice(8)+'/'+k.slice(5,7):g==='week'?wlabel(k):'T'+parseInt(k.slice(5))+'/'+k.slice(2,4)}
+function mkBuckets(g,fr,to){
+  const keys=[]; let d=fr;
+  while(d<=to){const k=bkey(d,g); if(!keys.length||keys[keys.length-1]!==k) keys.push(k); d=addD(d,1)}
+  return keys.map(k=>{
+    const bs=bstart(k,g), be=bend(k,g); const s=bs>fr?bs:fr, e=be<to?be:to; const full=diffD(be,bs)+1, days=diffD(e,s)+1;
+    return {k,g,s,e,full,days,partial:days<full,label:blabel(k,g)};
+  });
+}
+function usd0(v){return '$'+Math.floor(Math.abs(v)+0.5).toLocaleString('en-US')}
+function usd2(v){return '$'+Math.abs(v).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2})}
+function n0(v){return Math.floor(v+0.5).toLocaleString('en-US')}
+function pc(v){return isNaN(v)?'nan%':(v*100).toFixed(1)+'%'}
+function pc0(v){return isNaN(v)?'nan%':(v*100).toFixed(0)+'%'}
+function sg(v,f){f=f||usd2; return (v<-0.005?'-':'')+f(Math.abs(v))}
+function fin(v){return typeof v==='number' && isFinite(v)}
+
+
+
+const DATA_START='2026-06-01';
+function monthLen(y,m){return new Date(Date.UTC(y,m,0)).getUTCDate()}
+function _prev_range(F,Tt){
+  if(F.slice(8)==='01' && F.slice(0,7)===Tt.slice(0,7)){
+    let y=parseInt(F.slice(0,4)),m=parseInt(F.slice(5,7))-1;
+    if(m<1){m=12;y--}
+    const pf=y+'-'+String(m).padStart(2,'0')+'-01';
+    const ml=monthLen(y,m), cl=monthLen(parseInt(F.slice(0,4)),parseInt(F.slice(5,7)));
+    if(parseInt(Tt.slice(8))<cl){
+      return [pf, y+'-'+String(m).padStart(2,'0')+'-'+String(Math.min(parseInt(Tt.slice(8)),ml)).padStart(2,'0'), false];
+    }
+    const pt=addD(F,-1); return [pf,pt,true];
+  }
+  const n=diffD(Tt,F)+1; return [addD(F,-n),addD(F,-1),false];
+}
+function cell(t,cls){return {t:t,c:cls||''}}
+function r2(v){return parseFloat(v.toFixed(2))}
+/* Python's f'{v:.1f}' keeps the '-' sign for a negative value that rounds to 0.0;
+   JS's Number.prototype.toFixed drops it. Match Python's display exactly. */
+function pyFixed1(v){const s=v.toFixed(1); return (s==='0.0' && (Object.is(v,-0)||v<0))?'-0.0':s}
+function cls3(a,d){return (!d||Math.abs(a)<1e-9)?'':((a>0)===(d>0)?'ok':'bad')}
+
+function buildPayload(E, FROM, TO, pdlCsv){
+  const sfCompute=mkSfCompute(E), agg=mkAgg(E), shAgg=mkShAgg(E);
+  const GR=['day','week','month'];
+  const [PF,PT,PMONTH]=_prev_range(FROM,TO);
+  const NOPREV=PF<DATA_START;
+  const NDAYS=diffD(TO,FROM)+1, PNDAYS=diffD(PT,PF)+1;
+  const MON=d=>parseInt(d.slice(5,7));
+  function monthLenOf(d){return monthLen(parseInt(d.slice(0,4)),parseInt(d.slice(5,7)))}
+  const SINGLE=(FROM.slice(8)==='01' && FROM.slice(0,7)===TO.slice(0,7) && TO===FROM.slice(0,7)+'-'+String(monthLenOf(FROM)).padStart(2,'0'));
+  const TLAB=SINGLE?('T'+MON(FROM)):'kỳ';
+  const PSHORT=PMONTH?('T'+MON(PF)):'kỳ trước';
+  const PRNG=dm(PF)+'–'+dm(PT);
+  const PLBL='Kỳ trước '+PRNG+(NOPREV?': không đủ dữ liệu':'');
+  const PLBL2=NOPREV?'Kỳ trước: không đủ dữ liệu':('Kỳ trước '+PRNG);
+  const CRNG=dm(FROM)+'–'+dm(TO);
+  const MLAB=k=>'Th'+parseInt(k.slice(5,7))+'/'+k.slice(0,4);
+  const [T]=sfCompute(FROM,TO);
+  const AGm=agg(FROM,TO), AGs=agg(PF,PT);
+  const adsT=T.ads+T.adsm, AG=AGm.adsGmv;
+  let br_tiles=[
+    ['Total GMV (gồm co-funding)',usd0(T.gmvc),n0(T.orders)+' đơn bán'],
+    ['Total Ads Spend',usd0(adsT),'GMV Max '+usd0(T.ads)+' + Ads Manager '+usd0(T.adsm)],
+    ['Chi phí Sample',usd0(T.sample_cost),n0(T.samples)+' đơn sample'],
+    ['Lợi nhuận ròng',sg(T.net_profit,usd0),T.net_profit<0?'đang LỖ':'có lãi'],
+    ['TACOS',pc(T.gmvc?adsT/T.gmvc:0),'Total Ads Spend / Total GMV'],
+    ['ACOS',AG>0?pc(adsT/AG):pc(0),'Total Ads Spend / Ads GMV'],
+    ['ROAS',adsT>0?(AG/adsT).toFixed(2):'0.00','Ads GMV / Total Ads Spend; Ads GMV '+usd0(AG)]
+  ].map(([a,b,c])=>({l:a,v:b,s:c,bad:(a==='Lợi nhuận ròng'&&T.net_profit<0)}));
+  const [TS]=sfCompute(PF,PT);
+  const adsS=TS.ads+TS.adsm, AGS=AGs.adsGmv;
+  const _P=NOPREV?{}:{
+    'Total GMV (gồm co-funding)':[T.gmvc,TS.gmvc,'usd0',1],
+    'Total Ads Spend':[adsT,adsS,'usd0',-1],
+    'Chi phí Sample':[T.sample_cost,TS.sample_cost,'usd0',-1],
+    'Lợi nhuận ròng':[T.net_profit,TS.net_profit,'usd0',1],
+    'TACOS':[T.gmvc?adsT/T.gmvc:0, TS.gmvc?adsS/TS.gmvc:0,'pct',-1],
+    'ACOS':[AG>0?adsT/AG:0, AGS>0?adsS/AGS:0,'pct',-1],
+    'ROAS':[adsT>0?AG/adsT:0, adsS>0?AGS/adsS:0,'x',1],
+  };
+  const _fmtv=(v,k)=>({usd0:usd0,pct:pc,x:z=>z.toFixed(2)})[k](v);
+  br_tiles.forEach(t=>{
+    if(_P[t.l]){
+      const [c,p,k,dr]=_P[t.l];
+      let a=c-p, dd;
+      if(k==='pct'){ dd=(a>0?'▲ +':a<0?'▼ −':'■ ')+Math.abs(a*100).toFixed(1)+' điểm %'; }
+      else{ const pr=p?a/Math.abs(p):null; dd=(a>0?'▲ +':a<0?'▼ −':'■ ')+(k==='usd0'?usd0(Math.abs(a)):Math.abs(a).toFixed(2))+((pr!==null&&Math.abs(a)>1e-9)?(' ('+(pr>0?'+':'−')+Math.abs(pr*100).toFixed(1)+'%)'):''); }
+      t.d=dd+' so với '+PSHORT; t.dc=cls3(a,dr);
+      t.prev=(PMONTH?('Tháng '+MON(PF)+' ('+dm(PF)+'–'+dm(PT)+'): '):(PLBL2+': '))+((k==='usd0'&&t.l==='Lợi nhuận ròng')?sg(p,usd0):_fmtv(p,k));
+    }
+  });
+  const take=`Trong ${SINGLE?('tháng '+MON(FROM)):('kỳ '+CRNG)}, SEN bán ${n0(T.orders)} đơn với Total GMV ${usd0(T.gmvc)}; Total Ads Spend ${usd0(adsT)} (TACOS ${pc(T.gmvc?adsT/T.gmvc:0)}) và sample ${usd0(T.sample_cost)}, nên lợi nhuận ròng là ${sg(T.net_profit,usd0)}.`;
+  const FMT={usd:usd0,usd2:usd2,n:n0,x:v=>v.toFixed(2),pct:pc};
+  function dtxt(cur,prev,kind,fmt,d){
+    if(NOPREV) return ['—',''];
+    if(!fin(cur)||!fin(prev)) return ['—',''];
+    const a=cur-prev; const ar=a>0?'▲ +':a<0?'▼ −':'■ ';
+    if(kind==='pp') return [ar+Math.abs(a*100).toFixed(1)+' điểm %', cls3(a,d)];
+    const p=prev?a/Math.abs(prev):NaN;
+    return [ar+FMT[fmt](Math.abs(a))+(fin(p)?(' ('+(p>0?'+':p<0?'−':'')+Math.abs(p*100).toFixed(1)+'%)'):''), cls3(a,d)];
+  }
+  const cur=AGm, prv=AGs;
+  const rcOK=TO<=E.LASTSET;
+  const kt=(label,val,d,sub)=>({l:label,v:val,d:d[0],dc:d[1],s:sub});
+  const D=(f,kind,fmt,dr)=>dtxt(cur[f],prv[f],kind,fmt,dr);
+  const br_kpi=[
+    kt('GMV có TikTok co-funding',usd0(cur.gmvC),D('gmvC','amt','usd',1),'KPI chính · gồm cả đơn hủy/hoàn'),
+    kt('TikTok co-funding',usd0(cur.cof),D('cof','amt','usd',0),'theo Shop Analytics'),
+    kt('Co-funding / GMV',pc(cur.ratio),D('ratio','pp','pct',0),'tỷ lệ phụ thuộc trợ giá TikTok'),
+    kt('Orders',n0(cur.orders),D('orders','amt','n',1),'số đơn chính'),
+    kt('Item Orders',n0(cur.items),D('items','amt','n',1),'số sản phẩm bán ra'),
+    kt('AOV',usd2(cur.aov),D('aov','amt','usd2',1),'GMV ÷ Item Orders'),
+    kt('Total Ads Spend',usd0(cur.adsT),D('adsT','amt','usd',-1),'GMV Max + Ads Manager'),
+    kt('TACOS',pc(cur.tacos),D('tacos','pp','pct',-1),'Total Ads Spend ÷ Total GMV'),
+    kt('Tỷ lệ hoàn tiền', rcOK?pc(cur.refR):'chưa đủ dữ liệu',['không so sánh (hoàn/hủy ghi nhận trễ)',''],'refund_amount ÷ GMV có co-funding'),
+    kt('Tỷ lệ hủy đơn', rcOK?pc(cur.canR):'chưa đủ dữ liệu',['không so sánh (hoàn/hủy ghi nhận trễ)',''],'đơn hủy chỉ ghi nhận sau khi có sao kê'),
+  ];
+  const br_cap='Kỳ đang xem: '+(SINGLE?(`T${MON(FROM)}/${FROM.slice(2,4)} (${dmy(FROM)} → ${dmy(TO)}, ${NDAYS}/${NDAYS} ngày). `):(`${dmy(FROM)} → ${dmy(TO)} (${NDAYS}/${NDAYS} ngày). `))+(NOPREV?'Chưa có kỳ trước đủ dữ liệu để so sánh.':(`So với ${dmy(PF)} → ${dmy(PT)} (${PMONTH?'cả tháng trước':'kỳ liền trước cùng độ dài'}).`));
+
+  // ---- SH table
+  const SHR=[
+    {n:'1',l:'Total GMV',b:1,v:a=>a.gmvC,fm:'usd2'},
+    {l:'Seller Video GMV',s:1,v:a=>a.selfV,fm:'usd2',of:a=>a.gmvC},
+    {l:'Affiliate Video GMV',s:1,v:a=>a.affV,fm:'usd2',of:a=>a.gmvC},
+    {l:'Product Card GMV',s:1,v:a=>a.card,fm:'usd2',of:a=>a.gmvC},
+    {l:'Livestream GMV',s:1,v:a=>a.live,fm:'usd2',of:a=>a.gmvC},
+    {l:'TikTok co-funding GMV',s:1,v:a=>a.cof,fm:'usd2',of:a=>a.gmvC},
+    {n:'2',l:'Total Ads Spend',b:1,v:a=>a.ads+a.adsm,fm:'usd2'},
+    {l:'GMV Max',s:1,v:a=>a.ads,fm:'usd2'},
+    {l:'Ads Manager',s:1,v:a=>a.adsm,fm:'usd2'},
+    {n:'3',l:'Chi phí Affiliate Commission',b:1,v:a=>a.afb+a.afs,fm:'usd2'},
+    {l:'Base Commission (Open & Target)',s:1,v:a=>a.afb,fm:'usd2',of:a=>a.afb+a.afs},
+    {l:'Shop Ads Commission',s:1,v:a=>a.afs,fm:'usd2',of:a=>a.afb+a.afs},
+    {n:'4',l:'Total Item Orders',b:1,v:a=>a.items,fm:'n'},
+    {l:'Items from GMV Max',s:1,v:a=>Math.min(a.adsItems,a.items),fm:'n',of:a=>a.items},
+    {l:'Other Items',s:1,v:a=>Math.max(0,a.items-a.adsItems),fm:'n',of:a=>a.items},
+    {l:'Total Sample Sent',b:1,v:a=>a.sl+a.se,fm:'n'},
+    {l:'Magnesium Lavender',s:1,v:a=>a.sl,fm:'n',of:a=>a.sl+a.se},
+    {l:'Magnesium Eucalyptus',s:1,v:a=>a.se,fm:'n',of:a=>a.sl+a.se},
+    {n:'5',l:'Cancel/Return',b:1,hdr:1},
+    {l:'Số tiền hoàn trả',s:1,v:a=>a.refund,fm:'usd2'},
+    {l:'Số sản phẩm hoàn/hủy',s:1,v:a=>a.cancel,fm:'n',of:a=>a.items},
+    {n:'6',l:'TACOS',b:1,po:a=>a.gmvC?(a.ads+a.adsm)/a.gmvC:0},
+    {n:'7',l:'ACOS',b:1,po:a=>a.adsGmv?(a.ads+a.adsm)/a.adsGmv:0},
+    {n:'8',l:'AOV',b:1,v:a=>a.items?a.gmvC/a.items:0,fm:'usd2'},
+    {n:'9',l:'Total Video',b:1,v:a=>a.vaf+a.vso,fm:'n'},
+    {l:'TikTok Affiliate Creator',s:1,v:a=>a.vaf,fm:'n'},
+    {l:'Seller Official Account',s:1,v:a=>a.vso,fm:'n'},
+  ];
+  const FM2={usd2:usd2,n:n0};
+  function glabel(b,g){
+    if(g==='month') return 'Tháng '+parseInt(b.s.slice(5,7))+'/'+b.s.slice(0,4);
+    if(g==='week') return wlabel(b.s)+' ('+dm(b.s)+'–'+dm(b.e)+')';
+    return dmy(b.s);
+  }
+  function sh_table(g){
+    const cols=mkBuckets(g,FROM,TO).map(b=>[b,shAgg(b.s,b.e)]).reverse();
+    const head=cols.map(([b,a])=>glabel(b,g)+(b.partial?' *':''));
+    const rows=SHR.map(r=>{
+      const cells=[cell((r.n?r.n+'. ':'')+r.l, r.s?'ind':'')];
+      cols.forEach(([b,a])=>{
+        let av='',sh='';
+        if('po' in r){ sh=pc(r.po(a)); }
+        else if('v' in r){
+          const v=r.v(a); av=fin(v)?FM2[r.fm](v):'—';
+          if('of' in r){ const o=r.of(a); sh=o?pc(v/o):'—'; }
+        }
+        cells.push(cell(av)); cells.push(cell(sh,'shp'));
+      });
+      return {cls:r.b?'sub':'',cells};
+    });
+    return {head:['Hạng mục'].concat(head), sub:['USD','%'], rows};
+  }
+  const SH={}; GR.forEach(g=>SH[g]=sh_table(g));
+
+  // ---- PL table
+  function pl_table(g){
+    const [C,ms0]=sfCompute(FROM,TO,g);
+    const ms=ms0.slice().reverse();
+    const allx=[];
+    ms.forEach(x=>{
+      const s=bstart(x.month,g)>FROM?bstart(x.month,g):FROM, e=bend(x.month,g)<TO?bend(x.month,g):TO;
+      const a=agg(s,e);
+      x.rvv=a.gmvC; x.gmvbase=a.gmvC; x.ordsa=a.items; x.gmvx=a.gmvX; allx.push(x);
+    });
+    const Tt=Object.assign({},C); Tt.rvv=AGm.gmvC; Tt.gmvbase=AGm.gmvC; Tt.ordsa=AGm.items; Tt.gmvx=AGm.gmvX; allx.push(Tt);
+    const head=['Hạng mục'];
+    ms.forEach(x=>{ head.push(g!=='month'?blabel(x.month,g):blabel(x.month,'month')); head.push('% GMV'); });
+    head.push('Tổng'); head.push('% GMV');
+    const rows=[];
+    function R(label,f,opt){
+      opt=opt||{};
+      const cells=[cell(label, opt.ind?'ind':'')];
+      allx.forEach(x=>{
+        const v=f(x);
+        let t;
+        if(opt.txt) t=opt.txt(x);
+        else if(opt.kind==='int') t=n0(v);
+        else if(opt.kind==='pct') t=pc(v);
+        else t=sg(v)+(((opt.est&&x.est>0.005)||(opt.estk&&x[opt.estk]>0.005))?'*':'');
+        const c=opt.sign?(v<-0.005?'bad':v>0.005?'ok':''):'';
+        cells.push(cell(t,c));
+        const money=!(opt.txt||opt.kind==='int'||opt.kind==='pct') && x.gmvbase>0;
+        cells.push(cell(money?(pyFixed1(v/x.gmvbase*100)+'%'):'—','chg'));
+      });
+      rows.push({cls:opt.cls||'', cells});
+    }
+    const S=(l,f,opt)=>R(l,f,Object.assign({},opt,{cls:'sec'}));
+    S('Sản phẩm',x=>x.ordsa,{kind:'int'}); R('Sản lượng bán',x=>x.ordsa,{kind:'int',ind:1}); R('Đơn sample',x=>x.samples,{kind:'int',ind:1});
+    S('AOV',x=>0,{txt:x=>x.ordsa>0?usd2(Math.max(0,x.rvv)/x.ordsa):usd2(0)});
+    S('CPA',x=>0,{txt:x=>x.ordsa>0?usd2((x.ads+x.adsm)/x.ordsa):usd2(0)});
+    S('Doanh thu',x=>Math.max(0,x.rvv)); R('GMV không có co-funding',x=>x.gmvx,{ind:1}); R('TikTok co-funding',x=>x.gmvbase-x.gmvx,{ind:1});
+    S('Chi phí nội sàn',x=>x.settle-x.mcf_sale-x.net);
+    R('Referral fee',x=>-x.referral,{ind:1,est:1}); R('Affiliate commission',x=>-x.affiliate,{ind:1,est:1}); R('Promotions',x=>-x.promo,{ind:1,est:1});
+    R('Fulfillment fee',x=>-(x.fbt_sale+x.mcf_sale),{ind:1,est:1});
+    R('Chi phí khác',x=>x.settle-(x.net-x.referral-x.affiliate-x.promo-x.fbt_sale),{ind:1});
+    S('Chi phí ngoại sàn',x=>-x.landed_sale); R('Landed Cost',x=>-x.landed_sale,{ind:1});
+    rows.push({cls:'sec',cells:[cell('Lợi nhuận')].concat(allx.flatMap(()=>[cell(''),cell('','chg')]))});
+    S('Gross profit',x=>x.gross_profit,{sign:1});
+    R('Sample Landed cost',x=>-x.landed_sample,{ind:1}); R('Sample Fulfillment fee',x=>-(x.mcf_sample+x.fbt_sample),{ind:1});
+    R('Advertising',x=>-(x.ads+x.adsm),{ind:1}); R('Storage fee',x=>-x.storage,{ind:1,estk:'est_stor'}); R('Điều chỉnh khác',x=>x.other_adj,{ind:1});
+    S('Net profit',x=>x.net_profit,{sign:1});
+    R('Biên lợi nhuận ròng / Doanh thu',x=>Math.max(0,x.rvv)>0?x.net_profit/Math.max(0,x.rvv):0,{kind:'pct',ind:1,sign:1});
+    return {head,rows};
+  }
+  const PL={}; GR.forEach(g=>PL[g]=pl_table(g));
+
+  // ---- charts BR
+  function cats_B(g){
+    return mkBuckets(g,FROM,TO).map(b=>{
+      const a=agg(b.s,b.e); const [T2]=sfCompute(b.s,b.e);
+      return {label:b.label,range:dm(b.s)+'–'+dm(b.e),partial:b.partial,
+        rev:a.gmvC,aov:a.aov,ads:T2.ads+T2.adsm,net:T2.net_profit,orders:a.orders,items:a.items,tacos:a.tacos,acos:(a.adsGmv>0?a.adsT/a.adsGmv:0)};
+    });
+  }
+  function chart_pack(g){
+    const c=cats_B(g); const L=c.map(x=>x.label+(x.partial?'*':'')); const R_=c.map(x=>x.range);
+    return {labels:L, ranges:R_,
+      ov:{bars:[],lines:[{n:'Total GMV',c:'c1',v:c.map(x=>x.rev),f:'usd'},{n:'Total Ads Spend',c:'c3',v:c.map(x=>x.ads),f:'usd'},{n:'Lợi nhuận ròng',c:'c4',v:c.map(x=>x.net),f:'usd'}],lf:'usd'},
+      b0:{bars:[{n:'Doanh thu',c:'c1',v:c.map(x=>x.rev),f:'usd'},{n:'Ads Spending',c:'c3',v:c.map(x=>x.ads),f:'usd'}],lines:[{n:'AOV',c:'c2',v:c.map(x=>x.aov),f:'usd2',axis:'r'}],lf:'usd',rf:'usd'},
+      b3:{bars:[{n:'Orders',c:'c1',v:c.map(x=>x.orders),f:'n'},{n:'Item Orders',c:'c2',v:c.map(x=>x.items),f:'n'}],lines:[{n:'AOV',c:'c3',v:c.map(x=>x.aov),f:'usd2',axis:'r'}],lf:'n',rf:'usd'},
+      b4:{bars:[],lines:[{n:'TACOS',c:'ok',v:c.map(x=>x.tacos),f:'pct'},{n:'ACOS',c:'warn',v:c.map(x=>x.acos),f:'pct'}],lf:'pct',rf:'pct'},
+    };
+  }
+  const BRCH={}; GR.forEach(g=>BRCH[g]=chart_pack(g));
+
+  // ---- Bảng theo kỳ + MoM
+  function btab(g){
+    const L=mkBuckets(g,FROM,TO); const rows=[];
+    L.forEach((b,i)=>{
+      const c=agg(b.s,b.e);
+      let pp=null;
+      if(g==='month') pp=AGs;
+      else pp=(i>0 && L[i-1].days>=b.days)||(i>0&&g==='day') ? agg(L[i-1].s,L[i-1].e) : null;
+      if(g==='week' && i>0){
+        const P=L[i-1]; pp=(P.days>=b.days)?agg(P.s,addD(P.s,b.days-1)):null;
+      }
+      const dg=pp?dtxt(c.gmvC,pp.gmvC,'amt','usd',1):['—',''];
+      const ok=b.e<=E.LASTSET;
+      rows.push({cls:'',cells:[cell(b.label+(b.partial?'*':'')),cell(b.days+'/'+b.full),cell(usd0(c.gmvC)),cell(dg[0],dg[1]),cell(usd0(c.cof)),cell(pc(c.ratio)),cell(n0(c.orders)),cell(n0(c.items)),cell(usd2(c.aov)),cell(usd0(c.adsT)),cell(pc(c.tacos)),cell(ok?pc(c.refR):'chưa đủ dữ liệu'),cell(ok?pc(c.canR):'chưa đủ dữ liệu'),cell(ok?usd0(c.net):'chưa đủ settle')]});
+    });
+    const ls=E.LASTSET<TO?E.LASTSET:TO; const tl=agg(FROM,ls); const tt=AGm;
+    rows.push({cls:'sub',cells:[cell('Tổng kỳ'),cell(String(tt.days)),cell(usd0(tt.gmvC)),cell(''),cell(usd0(tt.cof)),cell(pc(tt.ratio)),cell(n0(tt.orders)),cell(n0(tt.items)),cell(usd2(tt.aov)),cell(usd0(tt.adsT)),cell(pc(tt.tacos)),cell(pc(tl.refR)+' (đến '+dm(ls)+')'),cell(pc(tl.canR)+' (đến '+dm(ls)+')'),cell(usd0(tl.net)+' (đến '+dm(ls)+')')]});
+    return {head:['Kỳ','Ngày','GMV có co-funding','% so kỳ trước','Co-funding','Co-fund / GMV','Orders','Item Orders','AOV','Total Ads Spend','TACOS','Hoàn tiền','Hủy','Doanh thu (Net sales)'],rows};
+  }
+  const BTAB={}; GR.forEach(g=>BTAB[g]=btab(g));
+  function cmp_rows(){
+    const cu=AGm,pr=AGs; const out=[];
+    function row(nm,c,p,fmt,kind,d){
+      kind=kind||'amt'; d=d||0;
+      const [t,cl]=dtxt(c,p,kind,fmt,d);
+      const rz=nm==='ROAS';
+      const rc=v=>(!rz||!fin(v))?'':(v<0.995?'roas-r':v<1.005?'roas-y':'roas-g');
+      out.push({cls:'',cells:[cell(nm),cell(fin(c)?FMT[fmt](c):'—',rc(c)),cell(fin(p)?FMT[fmt](p):'—',rc(p)),cell(t,cl)]});
+    }
+    row('GMV có co-funding',cu.gmvC,pr.gmvC,'usd','amt',1); row('TikTok co-funding',cu.cof,pr.cof,'usd','amt',0);
+    row('Orders',cu.orders,pr.orders,'n','amt',1); row('Item Orders',cu.items,pr.items,'n','amt',1); row('AOV',cu.aov,pr.aov,'usd2','amt',1);
+    row('Total Ads Spend',cu.adsT,pr.adsT,'usd','amt',-1); row('TACOS',cu.tacos,pr.tacos,'pct','pp',-1);
+    row('ACOS',cu.adsGmv>0?cu.adsT/cu.adsGmv:0, pr.adsGmv>0?pr.adsT/pr.adsGmv:0,'pct','pp',-1);
+    row('ROAS',cu.adsT>0?cu.adsGmv/cu.adsT:0, pr.adsT>0?pr.adsGmv/pr.adsT:0,'x','amt',1);
+    row('Settlement (Cash Flow, theo ngày sao kê)',cu.settle,pr.settle,'usd','amt',1);
+    return out;
+  }
+  const MOM={head:['Chỉ số','Kỳ này · '+CRNG, NOPREV?'Kỳ trước · không đủ dữ liệu':('Kỳ trước · '+PRNG+(PMONTH?' (cả kỳ, độ dài khác nhau)':'')),'Thay đổi (số tuyệt đối, %)'],rows:cmp_rows()};
+
+  // ================= SECTION 2: ADS PERFORMANCE =================
+  const apr=E.ads.map(r=>{
+    const spend=N(r.spend), amd=N(r.ads_manager_spend), o=N(r.orders);
+    const aovOk=r.aov!==null && r.aov!==undefined && r.aov!=='' && !isNaN(parseFloat(r.aov));
+    const aov=aovOk?parseFloat(r.aov):0;
+    const gmv=(o>0 && aovOk)?r2(o*aov):0;
+    return {date:r.date,spend,amd,orders:o,gmv};
+  });
+  const APD=apr.filter(r=>r.date>='2026-06-01');
+  function sumR(rows){
+    const gm=rows.reduce((a,r)=>a+r.spend,0), amd=rows.reduce((a,r)=>a+r.amd,0), gmv=rows.reduce((a,r)=>a+r.gmv,0), o=rows.reduce((a,r)=>a+r.orders,0); const tot=gm+amd;
+    return {gm,amd,tot,gmv,orders:o,roas:tot>0?gmv/tot:0,cpa:o>0?gm/o:0};
+  }
+  const octR=APD.filter(r=>FROM<=r.date&&r.date<=TO);
+  const cuA=sumR(octR), pvA=sumR(APD.filter(r=>PF<=r.date&&r.date<=PT));
+  const l1=APD.find(r=>r.date===TO), l0=APD.find(r=>r.date===addD(TO,-1));
+  function chip(c,p,up){
+    if(c===null||c===undefined||p===null||p===undefined||p===0) return ['—',''];
+    const x=(c-p)/Math.abs(p);
+    if(Math.abs(x)<0.0005) return ['0.0%',''];
+    const good=up?(x>0):(x<0);
+    return [(x>0?'▲ ':'▼ ')+Math.abs(x*100).toFixed(1)+'%', good?'ok':'bad'];
+  }
+  function apcard(label,key,fmt,up,hint,roi){
+    const c=cuA[key],p=pvA[key]; const d=chip(c,p,up);
+    return {l:label,v:fmt(c),d:d[0],dc:d[1],vc:roi?(cuA.roas>=1?'ok':'bad'):'',hint,pv:fmt(p)};
+  }
+  function fm_money(v){v=r2(v); return '$'+v.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2})}
+  const AP_CARDS=[
+    apcard('ROAS','roas',v=>v.toFixed(2),true,'Ads GMV / Total Ads Spend · Breakeven 2.4 · Tham chiếu 1.0',true),
+    apcard('CPA GMV Max','cpa',fm_money,false,'GMV Max / đơn GMV Max'),
+    apcard('Total Ads Spend','tot',fm_money,false,'GMV Max + Ads Manager · '+fm_money(cuA.gm)+' + '+fm_money(cuA.amd)),
+    apcard('Tổng Ads GMV','gmv',fm_money,true,'Đơn x AOV của Ads'),
+    apcard('Số đơn Ads','orders',n0,true,CRNG.replace('–',' → ')+' · '+NDAYS+' ngày'),
+  ];
+  const AP_META={day:'Ngày gần nhất ('+dm(TO)+') so với '+dm(addD(TO,-1)), prev:NOPREV?'chưa có kỳ trước đủ dữ liệu':('so với kỳ trước '+PRNG)};
+  function monday(d){const x=new Date(d+'T00:00:00Z'); const wd=(x.getUTCDay()+6)%7; return new Date(x.getTime()-wd*86400000).toISOString().slice(0,10)}
+  function ap_buckets(g,R){
+    const order=[]; const b={};
+    (R||octR).forEach(r=>{
+      const k=g==='day'?r.date:g==='week'?monday(r.date):r.date.slice(0,7);
+      if(!(k in b)){b[k]={spend:0,amd:0,orders:0,gmv:0}; order.push(k)}
+      ['spend','amd','orders','gmv'].forEach(f=>b[k][f]+=r[f]);
+    });
+    return Array.from(new Set(order)).sort().map(k=>{
+      const x=b[k]; const gm=x.spend; const tot=gm+x.amd;
+      const lab=g==='day'?dm(k):g==='week'?(k.slice(5)+'→'+addD(k,6).slice(5)):MLAB(k);
+      return {label:lab,gm,amd:x.amd,tot,orders:x.orders,gmv:x.gmv,cpa:x.orders>0?gm/x.orders:0,roas:tot>0?x.gmv/tot:null};
+    });
+  }
+  function ap_pack(g,R){
+    const a=ap_buckets(g,R); const L=a.map(x=>x.label);
+    const prog={bars:[{n:'Item Orders',c:'c4',v:a.map(x=>x.orders),f:'n',axis:'r'}],lines:[{n:'Ads GMV',c:'ok',v:a.map(x=>x.gmv),f:'usd2'},{n:'Total Ads Spend',c:'c3',v:a.map(x=>x.tot),f:'usd2',dash:1}],lf:'usd',rf:'n',rbar:true};
+    const roi={bars:[],lines:[{n:'ROAS',c:'c1',v:a.map(x=>x.roas),f:'x'}],refs:[{n:'Breakeven 2.4',v:2.4,c:'ok'},{n:'Tham chiếu 1.0',v:1.0,c:'warn'}],lf:'x'};
+    const sp={bars:[{n:'GMV Max',c:'c2',v:a.map(x=>x.gm),f:'usd2'},{n:'Ads Manager',c:'c3',v:a.map(x=>x.amd),f:'usd2'}],lines:[],lf:'usd'};
+    const cpa={bars:[{n:'CPA (GMV Max)',c:'c5',v:a.map(x=>x.cpa),f:'usd2'}],lines:[],lf:'usd'};
+    const t1={head:['Kỳ','Ads GMV','Total Ads Spend','Item Orders'],rows:a.map(x=>({cls:'',cells:[cell(x.label),cell(fm_money(x.gmv)),cell(fm_money(x.tot)),cell(n0(x.orders))]}))};
+    const tot=sumR(R||octR);
+    t1.rows.push({cls:'sub',cells:[cell('Tổng '+TLAB),cell(fm_money(tot.gmv)),cell(fm_money(tot.tot)),cell(n0(tot.orders))]});
+    const rc=v=>v===null?'':(v>=1?'roas-g':'roas-r');
+    const t2={head:['Kỳ','GMV Max','Ads Manager','Đơn GMV Max','CPA (GMV Max)','ROAS'],rows:a.map(x=>({cls:'',cells:[cell(x.label),cell(fm_money(x.gm)),cell(fm_money(x.amd)),cell(n0(x.orders)),cell(fm_money(x.cpa)),cell(x.roas!==null?x.roas.toFixed(2):'–',rc(x.roas))]}))};
+    t2.rows.push({cls:'sub',cells:[cell('Tổng '+TLAB),cell(fm_money(tot.gm)),cell(fm_money(tot.amd)),cell(n0(tot.orders)),cell(fm_money(tot.cpa)),cell(tot.roas.toFixed(2),rc(tot.roas))]});
+    return {labels:L,prog,roi,cpa,sp,t1,t2};
+  }
+  const AP={}; GR.forEach(g=>AP[g]=ap_pack(g));
+
+  // --- product breakdown (Section 2 filter)
+  const pdl=pdlCsv;
+  const PK={lav:['Magnesium Lavender',['1732385063656330102']],euc:['Magnesium Eucalyptus',['1732385101296604022']],combo:['Combo Magnesium Lavender',['1732422994519495542']]};
+  PK.old=['Old (sản phẩm cũ)',null];
+  const _main=new Set(Object.values(PK).filter(v=>v[1]).flatMap(v=>v[1]));
+  function prod_rows(k){
+    const ids=PK[k][1]; const dd={};
+    pdl.forEach(r=>{
+      const pid=String(r.product_id);
+      if((ids&&ids.includes(pid)) || (!ids && !_main.has(pid))){
+        const x=dd[r.date]=dd[r.date]||{spend:0,orders:0,gmv:0};
+        x.spend+=N(r.spend); x.orders+=N(r.orders); x.gmv+=N(r.ads_gmv);
+      }
+    });
+    return APD.map(r=>{
+      const x=dd[r.date]||{spend:0,orders:0,gmv:0};
+      return {date:r.date,spend:r2(x.spend),amd:0,orders:x.orders,gmv:r2(x.gmv)};
+    });
+  }
+  function mk_cards(R){
+    const c_=sumR(R.filter(r=>FROM<=r.date&&r.date<=TO)), p_=sumR(R.filter(r=>PF<=r.date&&r.date<=PT));
+    function cd(label,key,fmt,up,hint,roi){
+      const c=c_[key],p=p_[key]; const d=chip(c,p,up);
+      return {l:label,v:fmt(c),d:d[0],dc:d[1],vc:roi?(c_.roas>=1?'ok':'bad'):'',hint,pv:fmt(p)};
+    }
+    return [
+      cd('ROAS','roas',v=>v.toFixed(2),true,'Ads GMV / Total Ads Spend · Breakeven 2.4 · Tham chiếu 1.0',true),
+      cd('CPA GMV Max','cpa',fm_money,false,'GMV Max / đơn GMV Max'),
+      cd('Total Ads Spend','tot',fm_money,false,'Chỉ GMV Max (Ads Manager không tách được theo sản phẩm)'),
+      cd('Tổng Ads GMV','gmv',fm_money,true,'GMV của đơn GMV Max theo sản phẩm'),
+      cd('Số đơn Ads','orders',n0,true,CRNG.replace('–',' → ')+' · '+NDAYS+' ngày'),
+    ];
+  }
+  const APX={}; const PB=[];
+  Object.keys(PK).forEach(k=>{
+    const [nm]=PK[k]; const R=prod_rows(k);
+    const apg={}; GR.forEach(g=>apg[g]=ap_pack(g,R.filter(r=>FROM<=r.date&&r.date<=TO)));
+    APX[k]={cards:mk_cards(R), AP:apg};
+    const c_=sumR(R.filter(r=>FROM<=r.date&&r.date<=TO)), p_=sumR(R.filter(r=>PF<=r.date&&r.date<=PT));
+    PB.push([nm,c_,p_]);
+  });
+  const _ts=PB.reduce((a,[,c])=>a+c.gm,0);
+  if(Math.abs(_ts-cuA.gm)>=0.05) throw new Error('product breakdown mismatch '+_ts+' vs '+cuA.gm);
+  const _rc=v=>v===null?'':(v>=1?'roas-g':'roas-r');
+  const _rows=PB.map(([nm,c,p])=>({cls:'',cells:[cell(nm),cell(fm_money(c.gm)),cell(cuA.gm>0?pc(c.gm/cuA.gm):'0.0%'),cell(n0(c.orders)),cell(fm_money(c.gmv)),cell(c.roas.toFixed(2),_rc(c.roas)),cell(fm_money(c.cpa)),cell(p.roas.toFixed(2),_rc(p.roas))]}));
+  const sumOrders=PB.reduce((a,[,c])=>a+c.orders,0), sumGmv=PB.reduce((a,[,c])=>a+c.gmv,0);
+  _rows.push({cls:'sub',cells:[cell('Tổng GMV Max'),cell(fm_money(cuA.gm)),cell('100.0%'),cell(n0(sumOrders)),cell(fm_money(sumGmv)),cell(cuA.gm>0?(sumGmv/cuA.gm).toFixed(2):'0.00'),cell(sumOrders>0?fm_money(cuA.gm/sumOrders):'$0.00'),cell('')]});
+  const PBRK={head:['Sản phẩm','GMV Max Spend','% Spend','Item Orders','Ads GMV','ROAS','CPA','ROAS '+PSHORT],rows:_rows};
+
+  // ================= SECTION 3: CHANNEL ANALYTICS =================
+  const ALLOWED=new Set(['1732385063656330102','1732385101296604022','1732422994519495542']);
+  const CHN=['seller_video','affiliate','product_card','seller_live'];
+  const CHL={seller_live:'Livestream',seller_video:'Seller Video',affiliate:'Creator Video',product_card:'Product Card'};
+  const chd={};
+  E.pcd.forEach(r=>{
+    if(!ALLOWED.has(String(r.product_id))) return;
+    const kk=r.date+'|'+r.channel; chd[kk]=(chd[kk]||0)+N(r.gmv);
+  });
+  function rngS(a,b){return E.shop.filter(r=>a<=r.date&&r.date<=b)}
+  const amMap={}; E.ads.forEach(r=>amMap[r.date]=r);
+  function caKpi(s,e){
+    let gmv=0,gmvNo=0,orders=0,units=0,refund=0,visitors=0,ordersV=0;
+    rngS(s,e).forEach(r=>{
+      if(N(r.product_page_visitor_cnt)>0) ordersV+=N(r.main_order_cnt);
+      gmv+=N(r.gmv_with_cofunding); gmvNo+=N(r.gmv); orders+=N(r.main_order_cnt); units+=N(r.item_sold_cnt); refund+=N(r.refund_amount); visitors+=N(r.product_page_visitor_cnt);
+    });
+    const spend=E.ads.filter(r=>s<=r.date&&r.date<=e).reduce((a,r)=>a+N(r.spend),0) + Object.keys(E.AMD).filter(d=>s<=d&&d<=e).reduce((a,d)=>a+E.AMD[d],0);
+    return {gmv,gmvNo,orders,units,refund,visitors,ordersV,spend,aov:units?gmv/units:0,tacos:gmv?spend/gmv:0,conv:visitors?ordersV/visitors:null,rr:gmv?refund/gmv:null};
+  }
+  const cc=caKpi(FROM,TO), cp=caKpi(PF,PT);
+  function pct_(c,p){return (p===null||p===0||c===null||p===undefined||c===undefined)?null:(c-p)/p}
+  function dspan(x,up){
+    up=up===undefined?true:up;
+    if(x===null) return ['—',''];
+    if(Math.abs(x)<0.0005) return ['0.0%',''];
+    const good=(x>0)===up;
+    return [(x>0?'▲ ':'▼ ')+Math.abs(x*100).toFixed(1)+'%', good?'ok':'bad'];
+  }
+  const pc1=v=>(v*100).toFixed(1)+'%';
+  function funnel(s,e){
+    const o={imp:0,clk:0,atc:0};
+    E.pcd.forEach(r=>{
+      if(!ALLOWED.has(String(r.product_id)) || !(s<=r.date&&r.date<=e)) return;
+      o.imp+=N(r.product_impression_pv); o.clk+=N(r.product_click_pv); o.atc+=N(r.add_to_cart_cnt_pv);
+    });
+    return o;
+  }
+  const fc=funnel(FROM,TO), fp=funnel(PF,PT);
+  function vis(s,e){
+    let pv=0,v=0,ov=0,buy=0,dv=0;
+    rngS(s,e).forEach(r=>{
+      pv+=N(r.product_page_view_cnt); buy+=N(r.buyer_cnt);
+      if(N(r.product_page_visitor_cnt)>0){v+=N(r.product_page_visitor_cnt);ov+=N(r.main_order_cnt);dv++}
+    });
+    return {pv,v,ov,dv,buy};
+  }
+  const vc=vis(FROM,TO), vp=vis(PF,PT);
+  function rt(a,b){return b?a/b:null}
+  function ctile2(l,c,p,fv,sub,up){
+    up=up===undefined?true:up;
+    const d=dspan(pct_(c,p),up);
+    return {l,v:c!==null?fv(c):'—',d:d[0],dc:d[1],prev:PLBL2+': '+((p!==null&&!NOPREV)?fv(p):'—'),s:sub};
+  }
+  const oc=cc.orders, op=cp.orders;
+  const CA_TILES=[
+    ctile2('Impression',fc.imp,fp.imp,n0,'Số lượt hiển thị (Organic & Paid)'),
+    ctile2('Click',fc.clk,fp.clk,n0,'Số lượt thực sự quan tâm đến thông tin sản phẩm'),
+    ctile2('CTR (Click ÷ Impression)',rt(fc.clk,fc.imp),rt(fp.clk,fp.imp),pc1,''),
+    ctile2('ATC (add to cart)',fc.atc,fp.atc,n0,'Số lượt có ý định mua sau khi Click'),
+    ctile2('Click → ATC',rt(fc.atc,fc.clk),rt(fp.atc,fp.clk),pc1,''),
+    ctile2('Purchase (số đơn)',oc,op,n0,'Số đơn hàng (Orders)'),
+    ctile2('Daily Customers',vc.buy/NDAYS,vp.buy/PNDAYS,v=>v.toFixed(1),'Trung bình khách hàng mỗi ngày'),
+    ctile2('ATC → Purchase',rt(oc,fc.atc),rt(op,fp.atc),pc1,'Tỷ lệ khách mua hàng sau khi có ý định'),
+    ctile2('CR (Click → đơn)',rt(oc,fc.clk),rt(op,fp.clk),pc1,'Tỷ lệ chuyển đổi toàn shop'),
+  ];
+  const CA_MINI=[];
+  function cb(d,g){return g==='day'?d:g==='week'?monday(d):d.slice(0,7)+'-01'}
+  function ca_pack(g){
+    const ds=[]; let d=FROM; while(d<=TO){ds.push(d); d=addD(d,1)}
+    const bk={}; const order=[];
+    ds.forEach(d=>{
+      const k=cb(d,g);
+      if(!(k in bk)){ bk[k]={spend:0,gmv:0,gm:0,amd:0}; CHN.forEach(c=>bk[k][c]=0); order.push(k); }
+      CHN.forEach(c=>bk[k][c]+=(chd[d+'|'+c]||0));
+      const sh=E.SGM[d]||{}; bk[k].gmv+=sh.gmvC||0;
+      bk[k].gm+=(amMap[d]?N(amMap[d].spend):0); bk[k].amd+=(E.AMD[d]||0);
+    });
+    const keys=Array.from(new Set(order)).sort();
+    const lab=k=>g==='month'?('T'+parseInt(k.slice(5,7))+'/'+k.slice(0,4)):dm(k);
+    const ch={bars:CHN.map((c,i)=>({n:CHL[c],c:['c1','c2','c3','c4'][i],v:keys.map(k=>bk[k][c]),f:'usd2'})),lines:[],lf:'usd',stack:true};
+    keys.forEach(k=>bk[k].spend=bk[k].gm+bk[k].amd);
+    const av={bars:[],lines:[{n:'GMV toàn shop',c:'c1',v:keys.map(k=>bk[k].gmv),f:'usd2'},{n:'Total Ads Spend',c:'c3',v:keys.map(k=>bk[k].spend),f:'usd2'}],lf:'usd'};
+    const rows1=keys.map(k=>({cls:'',cells:[cell(lab(k))].concat(CHN.map(c=>cell(usd2(bk[k][c])))).concat([cell(usd2(CHN.reduce((a,c)=>a+bk[k][c],0)))])}));
+    const tot={}; CHN.forEach(c=>tot[c]=keys.reduce((a,k)=>a+bk[k][c],0)); const tt=CHN.reduce((a,c)=>a+tot[c],0);
+    rows1.push({cls:'sub',cells:[cell('Tổng '+TLAB)].concat(CHN.map(c=>cell(usd2(tot[c])))).concat([cell(usd2(tt))])});
+    rows1.push({cls:'',cells:[cell('Tỷ trọng')].concat(CHN.map(c=>cell(tt?pc1(tot[c]/tt):'—','chg'))).concat([cell('100%','chg')])});
+    const t1={head:['Kỳ (bắt đầu)'].concat(CHN.map(c=>CHL[c])).concat(['Tổng kênh']),rows:rows1};
+    const rows2=keys.map(k=>({cls:'',cells:[cell(lab(k)),cell(usd2(bk[k].gmv)),cell(usd2(bk[k].gm)),cell(usd2(bk[k].amd)),cell(usd2(bk[k].spend)),cell(bk[k].gmv?pc1(bk[k].spend/bk[k].gmv):'—')]}));
+    const G=keys.reduce((a,k)=>a+bk[k].gmv,0), S=keys.reduce((a,k)=>a+bk[k].spend,0);
+    rows2.push({cls:'sub',cells:[cell('Tổng '+TLAB),cell(usd2(G)),cell(usd2(keys.reduce((a,k)=>a+bk[k].gm,0))),cell(usd2(keys.reduce((a,k)=>a+bk[k].amd,0))),cell(usd2(S)),cell(pc1(S/G))]});
+    const t2={head:['Kỳ (bắt đầu)','Total Shop GMV','GMV Max Spend','Ads Manager Spend','Total Ads Spend','TACOS'],rows:rows2};
+    return {labels:keys.map(lab),ch,av,t1,t2};
+  }
+  const CA={}; GR.forEach(g=>CA[g]=ca_pack(g));
+
+  return {take,br_tiles,br_kpi,br_cap,SH,PL,BRCH,BTAB,MOM,AP_CARDS,APX,PBRK,AP_META,AP,CA_TILES,CA_MINI,CA,
+    asof:{lastset:dmy(E.LASTSET), shop_end:dmy(E.shop.reduce((a,r)=>r.date>a?r.date:a,'')), onhold:'11/11/2026'},
+    meta:{single:SINGLE,tlab:TLAB,crng:CRNG,prng:PRNG,plbl:PLBL2,pshort:PSHORT,noprev:NOPREV,pmonth:PMONTH,frm:dmy(FROM),to:dmy(TO),pfrm:dmy(PF),pto:dmy(PT),ndays:NDAYS,tl:SINGLE?('tháng '+MON(FROM)):('kỳ '+CRNG)}};
+}
+
+window.__custom={buildEngine,buildPayload,csvParse};
+})();
+</script>
 <script>
 let P=null,PD=null,MONTHS=[],DI={};let curKey='';
 const $=id=>document.getElementById(id);
@@ -212,9 +941,34 @@ async function showKey(key){const my=++busy;let p;
 function startApp(D){PD=D.PD;MONTHS=D.months;DI=D;const pre=$('f-pre');pre.replaceChildren();
  [['Toàn kỳ','all']].concat(MONTHS.map(m=>[m.lab,m.k])).forEach(([n,k])=>{const x=el('button','',n);x.dataset.k=k;x.onclick=()=>showKey(k);pre.appendChild(x)});
  $('top-pill').textContent='Dữ liệu đến '+dmyS(D.dataEnd);
- showKey(MONTHS[MONTHS.length-1].k)}
+ $('f-from').min=DI.dataStart;$('f-from').max=DI.dataEnd;$('f-to').min=DI.dataStart;$('f-to').max=DI.dataEnd;
+ showKey(MONTHS[MONTHS.length-1].k);
+ ensureEngine().catch(()=>{})}
 
 let XD=null,XP=null;const XF={};
+let ENGINE=null,PDL=null;
+async function ensureXD(){if(!XD){if(!XP)XP=ungz(DI.X);XD=await XP}return XD}
+async function ensureEngine(){if(ENGINE)return ENGINE;const X=await ensureXD();
+ const csv={};Object.values(X.maps.br).forEach(n=>{csv[n]=X.csv[n]});
+ ENGINE=window.__custom.buildEngine(csv,X.consts);
+ PDL=window.__custom.csvParse(X.csv.product_daily);
+ return ENGINE}
+async function showCustom(from,to){
+ const go=$('f-go');go.disabled=true;const prevLabel=go.textContent;go.textContent='Đang tính…';
+ $('f-note').textContent='Đang tính số liệu cho '+dmyS(from)+' → '+dmyS(to)+'…';
+ try{
+  if(to<from)throw new Error('"Đến ngày" phải sau hoặc bằng "Từ ngày".');
+  if(from<DI.dataStart||to>DI.dataEnd)throw new Error('Chỉ chọn trong khoảng dữ liệu có sẵn ('+dmyS(DI.dataStart)+' → '+dmyS(DI.dataEnd)+').');
+  await ensureEngine();
+  const p=window.__custom.buildPayload(ENGINE,from,to,PDL);
+  P=p;curKey='custom:'+from+'_'+to;
+  document.querySelectorAll('#f-pre button').forEach(x=>x.className='');
+  $('f-note').textContent='Đang xem (tùy chọn): '+P.meta.frm+' → '+P.meta.to+' ('+P.meta.ndays+' ngày). Dữ liệu có từ '+dmyS(DI.dataStart)+' đến '+dmyS(DI.dataEnd)+'; số liệu toàn bộ Overview (kể cả Business Report/Ads Performance/Channel Analytics bên dưới) được tính lại ngay trong trình duyệt theo đúng khoảng ngày này.';
+  init();tgls();
+ }catch(e){$('f-note').textContent='Không tính được cho khoảng ngày này ('+(e&&e.message?e.message:e)+').'}
+ finally{go.disabled=false;go.textContent=prevLabel}
+}
+$('f-custom').addEventListener('submit',ev=>{ev.preventDefault();const f=$('f-from').value,t=$('f-to').value;if(!f||!t)return;showCustom(f,t)});
 const FONTS="@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap');";
 const esc=x=>x.replace(/<\/(script)/gi,'<\\/$1');
 function frameDoc(t){const X=XD,csv={};Object.values(X.maps[t]).forEach(n=>{csv[n]=X.csv[n]});

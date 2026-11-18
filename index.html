@@ -41,13 +41,11 @@ td.ok{color:var(--ok)}td.bad{color:var(--bad)}td.roas-g{color:var(--ok);font-wei
 .apc .row{display:flex;justify-content:space-between;gap:8px;font-size:12px;color:var(--mut)}.apc .row b{color:var(--fg)}
 @media(max-width:640px){.wrap{padding:12px 16px 40px}h1{font-size:20px}}
 .tabs{display:flex;gap:6px;flex-wrap:wrap;margin:14px 0 4px;border-bottom:1px solid var(--line)}.tabs button{font:inherit;font-weight:600;font-size:14px;padding:9px 16px;border:1px solid transparent;border-bottom:0;border-radius:10px 10px 0 0;background:none;color:var(--mut);cursor:pointer;margin-bottom:-1px}.tabs button.on{color:var(--fg);background:var(--panel);border-color:var(--line)}.xtab iframe{width:100%;border:0;display:block;min-height:480px;background:transparent}.xtab .xmsg{padding:24px 0;color:var(--mut)}[hidden]{display:none!important}
-#edtbtn.on{background:var(--acc);color:#fff;border-color:var(--acc)}.editing{outline:2px dashed var(--acc);outline-offset:6px;border-radius:10px}.editing button{-webkit-user-modify:read-only}.editing [contenteditable="true"]:hover{outline:1px dashed var(--acc);outline-offset:1px;cursor:text}
 </style><style>html.lk body>*:not(#gate){display:none!important}#gate{position:fixed;inset:0;z-index:99999;display:flex;align-items:center;justify-content:center;background:#f7f7f5;color:#1c1c1a;font:14px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif}@media (prefers-color-scheme:dark){#gate{background:#161615;color:#ecebe6}}#gate form{width:min(380px,calc(100% - 32px));background:rgba(127,127,127,.08);border:1px solid rgba(127,127,127,.3);border-radius:14px;padding:28px 24px}#gate h1{font-size:18px;margin:0 0 4px}#gate p{margin:0 0 16px;opacity:.7;font-size:13px}#gate input{width:100%;padding:10px 12px;border:1px solid rgba(127,127,127,.4);border-radius:8px;background:transparent;color:inherit;font:inherit}#gate button{margin-top:12px;width:100%;padding:10px;border:0;border-radius:8px;background:#2563eb;color:#fff;font:inherit;font-weight:600;cursor:pointer}#gate button:disabled{opacity:.6}#gate .e{color:#dc2626;font-size:12px;min-height:18px;margin-top:8px}</style></head><body><div id="gate"><form id="gf"><h1>SEN TTS | Báo cáo dự án</h1><p>Nội bộ Megaficus. Nhập mật khẩu để mở.</p><input type="password" id="gp" placeholder="Mật khẩu" autocomplete="current-password" autofocus><button id="gb" type="submit">Mở báo cáo</button><div class="e" id="ge"></div></form></div><div class="wrap">
 <h1><span id="h1t">SEN TTS | Báo cáo tháng 10/2026</span> <span class="pill" id="top-pill">Dữ liệu cập nhật định kỳ</span></h1>
 <p class="note" id="top-note"></p>
 <div class="tabs" id="tabs" role="tablist"><button data-t="ov" class="on">Overview</button><button data-t="br">Business Report</button><button data-t="ap">Ads Performance</button><button data-t="ca">Channel Analytics</button><button data-t="dm">Demographics</button></div>
 <div id="tab-ov">
-<div class="hd" style="margin:10px 0 0"><span class="note" id="edt-hint" style="margin:0;display:none">Đang ở chế độ sửa — bấm vào đoạn text, tiêu đề hoặc ô bảng bên dưới để chỉnh trực tiếp. Không lưu lại khi tải lại trang hoặc đổi kỳ/tab.</span><button id="edtbtn" class="tgl" type="button" style="margin:0">✎ Sửa text</button></div>
 <div class="card" id="flt" style="margin-top:10px;padding:12px 16px"><div class="hd" style="margin:0"><div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap"><b>Khoảng thời gian</b></div><div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap"><div class="seg" id="f-pre"></div><form class="dr" id="f-custom">Tùy chọn: <input type="date" id="f-from" required> → <input type="date" id="f-to" required><button type="submit" id="f-go">Xem</button></form></div></div><p class="note" id="f-note" style="margin-bottom:0"></p></div>
 
 <section class="sec" id="s0" style="margin-top:20px"><h2 id="h-ov">Overview · Tổng quan cả tháng 10</h2>
@@ -885,12 +883,7 @@ function chart(box,leg,cfg,labels,ranges){
 function seg(k,cb){const c=document.querySelector('.seg[data-k="'+k+'"]');c.replaceChildren();['day','week','month'].forEach(g=>{const b=el('button','',GN[g]);if(st[k]===g)b.className='on';b.onclick=()=>{st[k]=g;c.querySelectorAll('button').forEach(x=>x.className='');b.className='on';cb()};c.appendChild(b)})}
 function tiles(box,arr){box.replaceChildren();arr.forEach(t=>{const d=el('div','tile');d.appendChild(el('span','l',t.l));d.appendChild(el('b',t.bad?'bad':(t.vc||''),t.v));if(t.d!=null)d.appendChild(el('span','d '+(t.dc||''),t.d));if(t.s)d.appendChild(el('span','s',t.s));if(t.prev)d.appendChild(el('span','s',t.prev));box.appendChild(d)})}
 let EDIT=false;
-function applyEditGuard(){if(!EDIT)return;const root=$('tab-ov');root.querySelectorAll('button,select,input').forEach(b=>{b.contentEditable='false'})}
-function setEdit(v){EDIT=v;const root=$('tab-ov');root.contentEditable=v?'true':'false';
- applyEditGuard();
- const b=$('edtbtn');b.textContent=v?'✓ Xong':'✎ Sửa text';b.classList.toggle('on',v);
- $('edt-hint').style.display=v?'':'none';root.classList.toggle('editing',v)}
-$('edtbtn').onclick=()=>setEdit(!EDIT);
+function applyEditGuard(){}
 function tgls(){const col=window.__col=window.__col||{};document.querySelectorAll('.card .tgl').forEach(b=>b.remove());
  ['t-ap1','t-ap2','t-ca1','t-ca2'].forEach(id=>{const sc=$(id).parentNode;const b=el('button','tgl');const set=()=>{sc.style.display=col[id]?'none':'';b.textContent=col[id]?'Mở rộng bảng ▸':'Thu gọn bảng ▾'};set();b.onclick=()=>{col[id]=!col[id];set()};sc.parentNode.insertBefore(b,sc)})
  applyEditGuard()}

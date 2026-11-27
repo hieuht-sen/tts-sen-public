@@ -1285,7 +1285,7 @@ window.__insights = (function () {
         meta: [
           'So sánh với: ' + (hasPrev ? 'kỳ liền trước ' + dmy(pf) + ' – ' + dmy(pt) : 'chưa đủ dữ liệu kỳ trước'),
           'Dữ liệu đến ' + dmy(DI.dataEnd) + ' (GMT-8)',
-          'Nguồn: Business Report, Ads Performance, Channel Analytics (dashboard TTS Senotori)',
+          'Nguồn: Business Report, Ads Performance, Channel Analytics (dashboard TTS SEN)',
           'Nội bộ Megaficus'] });
 
       slides.push({ kind: 'list', section: 'Tóm tắt', title: 'Tóm tắt điều hành',
@@ -1330,8 +1330,11 @@ window.__insights = (function () {
         note: 'Đề xuất sinh theo quy tắc từ số liệu; quyết định cuối cùng thuộc người phụ trách.' });
 
       status('Đang tạo file PPTX…');
-      await window.__pptx.build({ file: 'TTS_Senotori_' + from + '_' + to + '.pptx', slides: slides });
+      await window.__pptx.build({ file: 'TTS_SEN_' + from + '_' + to + '.pptx', slides: slides });
       status('Đã xuất file PPTX kỳ ' + dmy(from) + ' – ' + dmy(to) + '.');
+      await window.__pptx.build({ file: 'TTS_SEN_' + from + '_' + to + '.pptx', slides: slides });
+      cleanup([mon, wk].concat(pv ? [pv] : []));
+      status('Đã xuất file PPTX tuần ' + dmy(from) + ' – ' + dmy(to) + '.');
     } catch (e) {
       status('Không xuất được PPTX (' + (e && e.message ? e.message : e) + ').');
     } finally {

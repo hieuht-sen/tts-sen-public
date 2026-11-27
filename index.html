@@ -822,11 +822,13 @@ function buildPayload(E, FROM, TO, pdlCsv){
 window.__custom={buildEngine,buildPayload,csvParse};
 })();
 </script>
-<script>/* PPTX export (weekly / monthly BOD slides). Charts are captured from the live SVG. */
+<script>/* PPTX export builder. Charts are captured from the live SVG; tables are paginated; each content slide can carry a "Nhận định" panel. */
 window.__pptx = (function () {
   var LIB = 'https://cdn.jsdelivr.net/npm/pptxgenjs@3.12.0/dist/pptxgen.bundle.js';
   var FONT = 'Plus Jakarta Sans';
-  var C = { dark: '032312', green: '1B7A4A', mint: '65BD8F', text: '333333', muted: '6B7280', line: 'E5E7EB', card: 'F9FAFB' };
+  var C = { dark: '032312', green: '1B7A4A', mint: '65BD8F', text: '333333', muted: '6B7280', line: 'E5E7EB', card: 'F9FAFB', panel: 'F3FAF6', red: 'B42318', light: '999999' };
+  var X0 = 0.5, TOP = 1.5, BOTTOM = 6.85, FULL_W = 12.3, LEFT_W = 8.2, PANEL_X = 8.95, PANEL_W = 3.85;
+  var ROW_H = 0.27, KPI_H = 1.5;
 
   function loadLib() {
     if (window.PptxGenJS) return Promise.resolve();
@@ -871,120 +873,291 @@ window.__pptx = (function () {
 
   function header(sl, section, title) {
     sl.background = { color: 'FFFFFF' };
-    sl.addText(section, { x: 0.5, y: 0.3, w: 4.5, h: 0.3, fontFace: FONT, fontSize: 9, bold: true, color: 'FFFFFF', fill: { color: C.green }, align: 'center', valign: 'middle' });
-    sl.addText(title, { x: 0.5, y: 0.7, w: 12.3, h: 0.6, fontFace: FONT, fontSize: 26, bold: true, color: C.dark, valign: 'middle' });
+    sl.addText(section, { x: X0, y: 0.3, w: 4.5, h: 0.3, fontFace: FONT, fontSize: 9, bold: true, color: 'FFFFFF', fill: { color: C.green }, align: 'center', valign: 'middle' });
+    sl.addText(title, { x: X0, y: 0.7, w: FULL_W, h: 0.6, fontFace: FONT, fontSize: 24, bold: true, color: C.dark, valign: 'middle' });
   }
 
-  function footer(sl, n) {
-    sl.addText('Megaficus | E-Commerce Growth Partner    ' + n, { x: 0.5, y: 7.05, w: 12.3, h: 0.25, fontFace: FONT, fontSize: 8, color: '999999' });
+  function footer(sl, n, note) {
+    if (note) sl.addText(note, { x: X0, y: 6.6, w: FULL_W, h: 0.3, fontFace: FONT, fontSize: 8, italic: true, color: C.muted });
+    sl.addText('Megaficus | E-Commerce Growth Partner    ' + n, { x: X0, y: 7.05, w: FULL_W, h: 0.25, fontFace: FONT, fontSize: 8, color: C.light });
   }
 
-  // deck = { file, slides: [{ section, title, kpis?: [{label,value,delta}], charts?: [svgElement], table?: {head: [], rows: [[]]} }] }
+  function kpiRow(p, sl, kpis, y, W) {
+    var n = kpis.length, gap = 0.15, cw = (W - (n - 1) * gap) / n;
+    kpis.forEach(function (k, j) {
+      var x = X0 + j * (cw + gap);
+      sl.addShape(p.ShapeType.rect, { x: x, y: y, w: cw, h: KPI_H, fill: { color: C.card }, line: { color: C.line } });
+      sl.addShape(p.ShapeType.rect, { x: x, y: y, w: cw, h: 0.05, fill: { color: C.green }, line: { color: C.green } });
+      sl.addText(k.label, { x: x + 0.12, y: y + 0.12, w: cw - 0.24, h: 0.3, fontFace: FONT, fontSize: 9, color: C.muted, fit: 'shrink' });
+      sl.addText(k.value, { x: x + 0.12, y: y + 0.4, w: cw - 0.24, h: 0.45, fontFace: FONT, fontSize: 20, bold: true, color: C.green, fit: 'shrink' });
+      sl.addText(k.delta || '', { x: x + 0.12, y: y + 0.86, w: cw - 0.24, h: 0.3, fontFace: FONT, fontSize: 8, color: C.text, fit: 'shrink' });
+      if (k.sub) sl.addText(k.sub, { x: x + 0.12, y: y + 1.14, w: cw - 0.24, h: 0.3, fontFace: FONT, fontSize: 8, color: C.muted, fit: 'shrink' });
+    });
+    return y + KPI_H + 0.15;
+  }
+
+  function panel(p, sl, bullets) {
+    sl.addShape(p.ShapeType.rect, { x: PANEL_X, y: TOP, w: PANEL_W, h: BOTTOM - TOP, fill: { color: C.panel }, line: { color: C.panel } });
+    sl.addShape(p.ShapeType.rect, { x: PANEL_X, y: TOP, w: 0.05, h: BOTTOM - TOP, fill: { color: C.green }, line: { color: C.green } });
+    sl.addText('Nhận định', { x: PANEL_X + 0.2, y: TOP + 0.12, w: PANEL_W - 0.3, h: 0.35, fontFace: FONT, fontSize: 13, bold: true, color: C.green });
+    var items = bullets.map(function (b) { return { text: b, options: { bullet: { indent: 14 }, paraSpaceAfter: 8 } }; });
+    sl.addText(items, { x: PANEL_X + 0.2, y: TOP + 0.55, w: PANEL_W - 0.35, h: BOTTOM - TOP - 0.7, fontFace: FONT, fontSize: 11, color: C.text, valign: 'top', fit: 'shrink' });
+  }
+
+  async function chartsBlock(sl, charts, y, W) {
+    var imgs = [];
+    for (var i = 0; i < charts.length; i++) imgs.push(await svgToPng(charts[i]));
+    var avail = BOTTOM - y, gap = 0.12;
+    var slot = (avail - (imgs.length - 1) * gap) / imgs.length;
+    imgs.forEach(function (im) {
+      var h = Math.min(slot, W * im.h / im.w), w = h * im.w / im.h;
+      if (w > W) { w = W; h = W * im.h / im.w; }
+      sl.addImage({ data: im.data, x: X0, y: y, w: w, h: h });
+      y += slot + gap;
+    });
+    return y;
+  }
+
+  function cellOf(v, first) {
+    var t = String(v == null ? '' : v);
+    var o = { color: t.trim().charAt(0) === '-' ? C.red : C.text, align: first ? 'left' : 'right' };
+    return { text: t, options: o };
+  }
+
+  // Two-row headers (e.g. P&L periods with USD / %): a first-row cell with rowSpan 2 is shown on row 1 and
+  // repeated on row 2, so both rows keep the same number of columns as the data rows.
+  function headRows(heads) {
+    var o = function (c) {
+      var x = { bold: true, color: 'FFFFFF', fill: { color: C.green }, align: 'center' };
+      if (c.cs > 1) x.colspan = c.cs;
+      return x;
+    };
+    if (heads.length < 2) return heads.map(function (row) { return row.map(function (c) { return { text: c.t, options: o(c) }; }); });
+    var spanned = [];
+    var r1 = heads[0].map(function (c) {
+      if (c.rs > 1) { spanned.push(c.t); return { text: '', options: o(c) }; }
+      return { text: c.t, options: o(c) };
+    });
+    var r2 = spanned.map(function (t) { return { text: t, options: o({ cs: 1 }) }; })
+      .concat(heads[1].map(function (c) { return { text: c.t, options: o(c) }; }));
+    return [r1, r2];
+  }
+
+  // Splits long tables into continuation slides so no row runs off the page.
+  function paginate(slides) {
+    var out = [];
+    slides.forEach(function (s) {
+      if (!s.table || !s.table.rows || !s.table.rows.length) { out.push(s); return; }
+      var top = s.kpis && s.kpis.length ? TOP + KPI_H + 0.15 : TOP;
+      var hdr = s.table.heads ? s.table.heads.length : 1;
+      var perPage = Math.max(5, Math.floor((BOTTOM - 0.1 - top - hdr * ROW_H) / ROW_H));
+      var rows = s.table.rows, part = 0;
+      for (var i = 0; i < rows.length; i += perPage) {
+        var sl = {
+          section: s.section, title: part === 0 ? s.title : s.title + ' (tiếp)',
+          table: { heads: s.table.heads, rows: rows.slice(i, i + perPage) },
+          note: s.note
+        };
+        if (part === 0) { sl.kpis = s.kpis; sl.charts = s.charts; sl.bullets = s.bullets; }
+        out.push(sl); part++;
+      }
+    });
+    return out;
+  }
+
+  function tableBlock(p, sl, t, y, W) {
+    var heads = t.heads && t.heads.length ? t.heads : [[{ t: '' }]];
+    var rows = headRows(heads);
+    t.rows.forEach(function (r) { rows.push(r.map(function (v, i) { return cellOf(v, i === 0); })); });
+    sl.addTable(rows, { x: X0, y: y, w: W, fontFace: FONT, fontSize: 9, rowH: ROW_H, border: { type: 'solid', color: C.line, pt: 0.5 }, valign: 'middle' });
+  }
+
+  function coverSlide(p, s) {
+    var sl = p.addSlide();
+    sl.background = { color: C.dark };
+    sl.addText('BÁO CÁO KINH DOANH', { x: 0.7, y: 1.6, w: 3.2, h: 0.35, fontFace: FONT, fontSize: 10, bold: true, color: 'FFFFFF', fill: { color: C.green }, align: 'center', valign: 'middle' });
+    sl.addText(s.title, { x: 0.7, y: 2.3, w: 11.5, h: 1.2, fontFace: FONT, fontSize: 40, bold: true, color: 'FFFFFF' });
+    sl.addText(s.subtitle, { x: 0.7, y: 3.6, w: 11.5, h: 0.5, fontFace: FONT, fontSize: 18, color: C.mint });
+    sl.addText(s.meta.map(function (m) { return { text: m, options: { breakLine: true } }; }), { x: 0.7, y: 5.0, w: 11.5, h: 1.4, fontFace: FONT, fontSize: 11, color: C.light, valign: 'top' });
+    sl.addText('Megaficus | E-Commerce Growth Partner · TikTok Shop · Amazon · Shopify', { x: 0.7, y: 7.0, w: 11.5, h: 0.25, fontFace: FONT, fontSize: 8, color: C.light });
+  }
+
+  function listSlide(p, sl, s) {
+    header(sl, s.section || '', s.title || '');
+    var y = TOP;
+    if (s.kpis && s.kpis.length) y = kpiRow(p, sl, s.kpis, y, FULL_W);
+    var items = s.list.map(function (t) { return { text: t, options: { bullet: { type: 'number', indent: 22 }, paraSpaceAfter: 12 } }; });
+    sl.addText(items, { x: X0, y: y + 0.1, w: FULL_W, h: BOTTOM - y - 0.2, fontFace: FONT, fontSize: 14, color: C.text, valign: 'top' });
+  }
+
+  // deck = { file, slides: [{ kind?: 'cover'|'list', section, title, kpis?, charts?: [svg], table?: {heads, rows}, bullets?, note? }] }
   async function build(deck) {
     await loadLib();
     var p = new window.PptxGenJS();
     p.layout = 'LAYOUT_WIDE';
+    var slides = paginate(deck.slides);
     var n = 0;
-    for (var i = 0; i < deck.slides.length; i++) {
-      var s = deck.slides[i];
-      var sl = p.addSlide(); n++;
+    for (var i = 0; i < slides.length; i++) {
+      var s = slides[i];
+      n++;
+      if (s.kind === 'cover') { coverSlide(p, s); continue; }
+      var sl = p.addSlide();
+      if (s.kind === 'list') { listSlide(p, sl, s); footer(sl, n, s.note); continue; }
       header(sl, s.section || '', s.title || '');
-      var y = 1.5;
-      if (s.kpis && s.kpis.length) {
-        s.kpis.forEach(function (k, j) {
-          var x = 0.5 + j * 3.1;
-          sl.addShape(p.ShapeType.rect, { x: x, y: y, w: 2.9, h: 1.3, fill: { color: C.card }, line: { color: C.line } });
-          sl.addShape(p.ShapeType.rect, { x: x, y: y, w: 2.9, h: 0.05, fill: { color: C.green }, line: { color: C.green } });
-          sl.addText(k.label, { x: x + 0.15, y: y + 0.1, w: 2.6, h: 0.3, fontFace: FONT, fontSize: 10, color: C.muted });
-          sl.addText(k.value, { x: x + 0.15, y: y + 0.4, w: 2.6, h: 0.5, fontFace: FONT, fontSize: 24, bold: true, color: C.green });
-          sl.addText(k.delta || '', { x: x + 0.15, y: y + 0.9, w: 2.6, h: 0.3, fontFace: FONT, fontSize: 10, color: C.text });
-        });
-        y += 1.6;
-      }
-      if (s.charts && s.charts.length) {
-        var imgs = [];
-        for (var c = 0; c < s.charts.length; c++) imgs.push(await svgToPng(s.charts[c]));
-        var slot = s.charts.length > 1 ? 6.1 : 12.3;
-        var maxH = 7.0 - y - 0.3;
-        imgs.forEach(function (im, k) {
-          var hgt = Math.min(maxH, slot * im.h / im.w);
-          var wid = hgt * im.w / im.h;
-          sl.addImage({ data: im.data, x: 0.5 + k * (slot + 0.1), y: y, w: wid, h: hgt });
-        });
-        y += maxH + 0.1;
-      }
-      if (s.table && s.table.rows && s.table.rows.length) {
-        var rows = [s.table.head.map(function (t) { return { text: String(t), options: { bold: true, color: 'FFFFFF', fill: { color: C.green } } }; })];
-        s.table.rows.forEach(function (r) { rows.push(r.map(function (t) { return { text: String(t), options: { color: C.text } }; })); });
-        sl.addTable(rows, { x: 0.5, y: y, w: 12.3, fontFace: FONT, fontSize: 10, rowH: 0.28, border: { type: 'solid', color: C.line, pt: 0.5 } });
-      }
-      footer(sl, n);
+      var hasPanel = !!(s.bullets && s.bullets.length);
+      var W = hasPanel ? LEFT_W : FULL_W;
+      var y = TOP;
+      if (s.kpis && s.kpis.length) y = kpiRow(p, sl, s.kpis, y, W);
+      if (s.charts && s.charts.length) y = await chartsBlock(sl, s.charts, y, W);
+      if (s.table && s.table.rows && s.table.rows.length) tableBlock(p, sl, s.table, y, W);
+      if (hasPanel) panel(p, sl, s.bullets);
+      footer(sl, n, s.note);
     }
     await p.writeFile({ fileName: deck.file });
+    return slides.length;
   }
 
   return { build: build, svgToPng: svgToPng };
 })();
-/* Overview: Tuan thang (week-of-month) filter. Picks a Monday-Sunday week and reuses the page's showCustom(). */
-(function () {
-  'use strict';
-  var built = false;
+/* Rule-based commentary ("Nhận định") for the PPTX export.
+   Every sentence is computed from numbers already shown on the dashboard. Thresholds are listed in the rules below. */
+window.__insights = (function () {
+  function num(s) {
+    if (s == null) return null;
+    var t = String(s).replace(/[−–]/g, '-').replace(/\$/g, '').replace(/,/g, '');
+    var m = t.match(/-?\d+(\.\d+)?/);
+    return m ? parseFloat(m[0]) : null;
+  }
+  // Percent change from a delta text such as "▲ +$203 (+111.7%) so với kỳ trước".
+  function chg(d) {
+    var m = String(d || '').replace(/[−–]/g, '-').match(/\(([+-]?\d+(?:\.\d+)?)%\)/);
+    return m ? parseFloat(m[1]) : null;
+  }
+  function usd(n) { return (n < 0 ? '-$' : '$') + Math.abs(Math.round(n)).toLocaleString('en-US'); }
+  function pct(n) { return (Math.round(n * 10) / 10).toFixed(1) + '%'; }
+  function up(n) { return (n > 0 ? '+' : '') + (Math.round(n * 10) / 10).toFixed(1) + '%'; }
+  function abs(n) { return Math.abs(Math.round(n * 10) / 10).toFixed(1) + '%'; }
 
-  function d0(s) { var p = s.split('-').map(Number); return new Date(Date.UTC(p[0], p[1] - 1, p[2])); }
-  function s0(d) { return d.toISOString().slice(0, 10); }
-  function addD(s, n) { var d = d0(s); d.setUTCDate(d.getUTCDate() + n); return s0(d); }
-  function minD(a, b) { return a < b ? a : b; }
-  function maxD(a, b) { return a > b ? a : b; }
-  function monday(s) { var d = d0(s); var wd = (d.getUTCDay() + 6) % 7; d.setUTCDate(d.getUTCDate() - wd); return s0(d); }
-  function dm(s) { return s.slice(8, 10) + '/' + s.slice(5, 7); }
-
-  function weeks() {
-    var out = [], st = monday(DI.dataStart);
-    while (st <= DI.dataEnd) {
-      out.push({ from: maxD(st, DI.dataStart), to: minD(addD(st, 6), DI.dataEnd) });
-      st = addD(st, 7);
+  // Rules: each returns { t: sentence, a: action } or null.
+  var RULES = {
+    profit: function (c) {
+      var np = c.tile('Lợi nhuận ròng'), g = c.tile('Total GMV');
+      if (np.n == null) return null;
+      if (np.n < 0) return { t: 'Kỳ đang lỗ ròng ' + usd(np.n) + (g.n ? ' (' + pct(np.n / g.n * 100) + ' GMV)' : '') + '; xem Báo cáo P&L để biết khoản chi làm lỗ.', a: 'Rà soát chi phí theo P&L và ngân sách quảng cáo trước khi tăng chi.' };
+      return { t: 'Kỳ có lãi ròng ' + usd(np.n) + '.', a: null };
+    },
+    tacos: function (c) {
+      var t = c.tile('TACOS');
+      if (t.n != null && t.n > 100) return { t: 'TACOS ' + pct(t.n) + ': chi quảng cáo lớn hơn doanh thu GMV của kỳ.', a: 'Cắt chi ở sản phẩm có ROAS thấp, giữ chi ở sản phẩm hiệu quả.' };
+      return null;
+    },
+    roas: function (c) {
+      var r = c.tile('ROAS');
+      if (r.n != null && r.n < 2.4) return { t: 'ROAS ' + r.n.toFixed(2) + ' thấp hơn ngưỡng hoà vốn 2.4 ghi trong dashboard: quảng cáo chưa thu đủ GMV để hoà vốn.', a: 'Tối ưu creative và đối tượng trước khi tăng ngân sách.' };
+      return null;
+    },
+    spendVsGmv: function (c) {
+      var gc = c.tile('Total GMV').c, sc = c.tile('Total Ads Spend').c;
+      if (gc == null || sc == null) return null;
+      if (sc > gc + 10) return { t: 'Chi quảng cáo tăng ' + up(sc) + ' trong khi GMV tăng ' + up(gc) + ': hiệu quả đầu tư đang giảm.', a: 'Giữ ngân sách ở sản phẩm ROAS cao, cắt ở sản phẩm ROAS thấp.' };
+      if (gc > sc + 10) return { t: 'GMV tăng ' + up(gc) + ', nhanh hơn chi quảng cáo (' + up(sc) + '): hiệu quả đầu tư cải thiện.', a: null };
+      return null;
+    },
+    cofund: function (c) {
+      var cf = c.tile('Co-funding / GMV').n;
+      if (cf != null && cf >= 40) return { t: 'TikTok co-funding chiếm ' + pct(cf) + ' GMV: một phần doanh thu đến từ trợ giá của TikTok.', a: 'Theo dõi GMV không co-funding song song với GMV tổng.' };
+      return null;
+    },
+    refund: function (c) {
+      var rf = c.tile('Tỷ lệ hoàn tiền').n;
+      if (rf != null && rf >= 10) return { t: 'Tỷ lệ hoàn tiền ' + pct(rf) + ' GMV; số hoàn có thể chưa đủ vì được ghi nhận trễ.', a: 'Kiểm tra lý do hoàn tiền trong Seller Center.' };
+      return null;
+    },
+    aov: function (c) {
+      var oc = c.tile('Orders').c, ac = c.tile('AOV').c;
+      if (oc != null && ac != null && oc > 0 && ac < 0) return { t: 'Số đơn tăng ' + up(oc) + ' nhưng AOV giảm ' + abs(ac) + ': mỗi đơn mua ít hơn.', a: 'Thử bundle hoặc ngưỡng free ship để tăng giá trị đơn.' };
+      return null;
+    },
+    sample: function (c) {
+      var sm = c.tile('Chi phí Sample'), g = c.tile('Total GMV');
+      if (sm.n != null && sm.n > 0 && g.n) return { t: 'Chi phí sample ' + usd(sm.n) + ' (' + pct(sm.n / g.n * 100) + ' GMV) cần đối chiếu với video và đơn phát sinh.', a: 'Đối chiếu số sample gửi đi với số video và đơn phát sinh.' };
+      return null;
+    },
+    ctr: function (c) {
+      var t = c.tile('CTR (Click ÷ Impression)');
+      if (t.c == null) return null;
+      if (t.c > 0) return { t: 'CTR ' + pct(t.n) + ' (' + up(t.c) + ' so với kỳ trước): tín hiệu quan tâm tốt hơn.', a: null };
+      return { t: 'CTR ' + pct(t.n) + ' giảm ' + abs(t.c) + ' so với kỳ trước.', a: 'Kiểm tra hook và ảnh/video đang chạy.' };
+    },
+    crDrop: function (c) {
+      var cr = c.tile('CR (Click → đơn)'), cl = c.tile('Click');
+      if (cr.c != null && cl.c != null && cl.c > 0 && cr.c < 0) return { t: 'Click tăng ' + up(cl.c) + ' nhưng CR giảm ' + abs(cr.c) + ': lượng truy cập mới chưa chuyển đổi tương ứng.', a: 'Rà giá, phí vận chuyển, tồn kho và nội dung trang sản phẩm.' };
+      return null;
+    },
+    atcDrop: function (c) {
+      var ap = c.tile('ATC → Purchase');
+      if (ap.c != null && ap.c <= -10) return { t: 'Tỷ lệ mua sau khi thêm giỏ giảm ' + abs(ap.c) + ' so với kỳ trước.', a: 'Kiểm tra giá, phí vận chuyển và tồn kho ở bước thanh toán.' };
+      return null;
+    },
+    concentration: function (c) {
+      var t = c.table('t-apb'); if (!t || !t.rows.length) return null;
+      var idx = t.head.indexOf('% Spend'); if (idx < 0) return null;
+      var best = null;
+      t.rows.forEach(function (r) { var v = num(r[idx]); if (v != null && (!best || v > best.v)) best = { v: v, name: r[0] }; });
+      if (best && best.v >= 80) return { t: best.name + ' chiếm ' + pct(best.v) + ' chi phí GMV Max: danh mục đang tập trung vào một sản phẩm.', a: 'Thử phân bổ ngân sách cho sản phẩm còn lại để giảm rủi ro.' };
+      return null;
+    },
+    lowRoasProduct: function (c) {
+      var t = c.table('t-apb'); if (!t || !t.rows.length) return null;
+      var ri = t.head.indexOf('ROAS'), si = t.head.indexOf('GMV Max Spend'); if (ri < 0 || si < 0) return null;
+      var out = [];
+      t.rows.forEach(function (r) { var ro = num(r[ri]), sp = num(r[si]); if (ro != null && sp != null && sp >= 100 && ro < 1) out.push({ name: r[0], ro: ro, sp: sp }); });
+      if (!out.length) return null;
+      var o = out[0];
+      return { t: o.name + ' có ROAS ' + o.ro.toFixed(2) + ' với chi tiêu ' + usd(o.sp) + ': dưới 1, quảng cáo chưa thu về đủ chi phí.', a: 'Giảm ngân sách hoặc tối ưu creative cho ' + o.name + '.' };
     }
-    return out;
+  };
+
+  var TOPICS = {
+    summary: ['profit', 'tacos', 'roas', 'spendVsGmv', 'cofund', 'aov', 'concentration'],
+    overview: ['profit', 'spendVsGmv', 'tacos'],
+    bpo: ['profit', 'tacos', 'spendVsGmv', 'aov', 'cofund', 'refund', 'sample'],
+    pl: ['profit', 'tacos', 'sample', 'refund'],
+    sh: ['cofund', 'refund', 'aov', 'sample', 'profit'],
+    ads: ['roas', 'tacos', 'spendVsGmv'],
+    apb: ['concentration', 'lowRoasProduct', 'roas'],
+    ca: ['ctr', 'crDrop', 'atcDrop'],
+    mom: ['profit', 'spendVsGmv', 'aov', 'ctr']
+  };
+
+  function run(names, c, max) {
+    var out = [];
+    names.forEach(function (n) { var r = RULES[n] && RULES[n](c); if (r) out.push(r); });
+    return max ? out.slice(0, max) : out;
   }
 
-  // Clears the week selection and tells listeners (the export button) that no week is active.
-  function clearWeek() {
-    window.__ttsWeek = null;
-    document.dispatchEvent(new CustomEvent('tts-week', { detail: null }));
-    var b = document.getElementById('wk-pre');
-    if (b) b.querySelectorAll('button').forEach(function (x) { x.className = ''; });
-  }
-
-  function build() {
-    if (built || !DI || !DI.dataStart) return;
-    built = true;
-    var box = document.createElement('div');
-    box.className = 'seg'; box.id = 'wk-pre';
-    weeks().forEach(function (w) {
-      var b = document.createElement('button');
-      b.textContent = 'Tuần ' + dm(w.from) + '–' + dm(w.to);
-      b.onclick = function () {
-        clearWeek();
-        b.className = 'on';
-        window.__ttsWeek = w;
-        showCustom(w.from, w.to).then(function () {
-          document.dispatchEvent(new CustomEvent('tts-week', { detail: w }));
-        });
-      };
-      box.appendChild(b);
-    });
-    document.getElementById('f-pre').parentNode.appendChild(box);
-    document.getElementById('f-pre').addEventListener('click', clearWeek, true);
-    document.getElementById('f-custom').addEventListener('submit', clearWeek, true);
-  }
-
-  var fp = document.getElementById('f-pre');
-  if (fp) new MutationObserver(build).observe(fp, { childList: true });
+  var FALLBACK = 'Không có điểm bất thường theo các quy tắc đã đặt; đối chiếu với bảng số liệu.';
+  return {
+    topic: function (name, c) {
+      var rs = run(TOPICS[name] || [], c, 4).map(function (r) { return r.t; });
+      return rs.length ? rs : [FALLBACK];
+    },
+    summary: function (c) { return run(TOPICS.summary, c, 5).map(function (r) { return r.t; }); },
+    actions: function (c) {
+      var seen = {}, out = [];
+      run(TOPICS.summary.concat(TOPICS.ca, TOPICS.mom), c).forEach(function (r) {
+        if (r.a && !seen[r.a]) { seen[r.a] = true; out.push(r.a); }
+      });
+      return out.slice(0, 6);
+    }
+  };
 })();
-/* PPTX export button. Shows when the Tuan thang (week) filter is active; exports the week, its month and the previous week. */
+/* PPTX export button. Shows when a period is selected in "Khoảng thời gian" (Toàn kỳ, a month, or Tùy chọn from–to).
+   Deck: cover, summary, (month overview when the period is part of one month), business results, P&L, ads, channel,
+   comparison with the previous period of the same length, and actions. Each content slide has a "Nhận định" panel. */
 (function () {
   'use strict';
-  var btn = null, wrap = null, cur = null;
+  var btn = null, busy = false;
 
   function d0(s) { var p = s.split('-').map(Number); return new Date(Date.UTC(p[0], p[1] - 1, p[2])); }
   function s0(d) { return d.toISOString().slice(0, 10); }
@@ -994,17 +1167,40 @@ window.__pptx = (function () {
   function monthEnd(s) { var d = d0(monthStart(s)); d.setUTCMonth(d.getUTCMonth() + 1); d.setUTCDate(0); return s0(d); }
   function dm(s) { return s.slice(8, 10) + '/' + s.slice(5, 7); }
   function dmy(s) { return s.slice(8, 10) + '/' + s.slice(5, 7) + '/' + s.slice(0, 4); }
+  function dayCount(a, b) { return Math.round((d0(b) - d0(a)) / 86400000) + 1; }
   function status(t) { var n = document.getElementById('f-note'); if (n) n.textContent = t; }
+  function txt(el, sel) { var x = el.querySelector(sel); return x ? x.textContent.trim() : ''; }
 
-  // Copy what is on screen right now (the page renders synchronously after showCustom).
+  // Period currently shown, read from the page's own state (curKey is set by showKey / showCustom).
+  function period() {
+    try {
+      var key = curKey;
+      if (!key || !DI || !DI.dataStart) return null;
+      if (key === 'all') return { key: key, from: DI.dataStart, to: DI.dataEnd };
+      if (key.indexOf('custom:') === 0) {
+        var p = key.slice(7).split('_');
+        return { key: key, from: p[0], to: p[1] };
+      }
+      return { key: key, from: key + '-01', to: minD(monthEnd(key + '-01'), DI.dataEnd) };
+    } catch (e) { return null; }
+  }
+
+  // Copy everything the overview shows for the current period.
   function snap() {
-    var kpis = [];
-    document.querySelectorAll('#br-tiles .tile').forEach(function (t) {
-      var l = t.querySelector('.l'), b = t.querySelector('b'), d = t.querySelector('.d');
-      kpis.push({ label: l ? l.textContent : '', value: b ? b.textContent : '', delta: d ? d.textContent : '' });
+    var tiles = [];
+    ['br-tiles', 'br-kpi', 'ca-tiles'].forEach(function (id) {
+      document.querySelectorAll('#' + id + ' .tile').forEach(function (t) {
+        tiles.push({ label: txt(t, '.l'), value: txt(t, 'b'), delta: txt(t, '.d'), sub: [txt(t, '.s'), txt(t, '.prev')].filter(Boolean).join(' · ') });
+      });
     });
-    var charts = [];
-    ['ch-ov', 'ch-b0', 'ch-b4'].forEach(function (id) {
+    document.querySelectorAll('#ap-cards .apc').forEach(function (c) {
+      var row = c.querySelector('.row');
+      var prevLabel = row && row.firstChild ? row.firstChild.textContent.trim() : '';
+      var prevValue = row ? txt(row, 'b') : '';
+      tiles.push({ label: txt(c, '.l'), value: txt(c, 'b'), delta: txt(c, '.d'), sub: prevLabel + (prevValue ? ': ' + prevValue : '') });
+    });
+    var charts = {};
+    ['ch-ov', 'ch-b0', 'ch-b4', 'ch-ap1', 'ch-ap4', 'ch-ca1', 'ch-ca2'].forEach(function (id) {
       var s = document.querySelector('#' + id + ' svg');
       if (!s) return;
       var r = s.getBoundingClientRect();
@@ -1012,64 +1208,149 @@ window.__pptx = (function () {
       c.setAttribute('width', r.width); c.setAttribute('height', r.height);
       c.style.position = 'absolute'; c.style.left = '-99999px';
       document.body.appendChild(c);
-      charts.push({ id: id, el: c });
+      charts[id] = c;
     });
-    var table = null, t = document.getElementById('t-sh');
-    if (t) {
-      var hr = t.querySelectorAll('thead tr');
-      var headRow = hr[hr.length - 1];
-      var head = [];
-      headRow.querySelectorAll('th').forEach(function (th) { head.push(th.textContent); });
+    var tables = {};
+    ['t-sh', 't-pl', 't-mom', 't-apb', 't-ca1'].forEach(function (id) {
+      var t = document.getElementById(id);
+      if (!t) return;
+      var heads = [];
+      t.querySelectorAll('thead tr').forEach(function (tr) {
+        var row = [];
+        tr.querySelectorAll('th').forEach(function (th) { row.push({ t: th.textContent.trim(), cs: th.colSpan || 1, rs: th.rowSpan || 1 }); });
+        heads.push(row);
+      });
       var rows = [];
       t.querySelectorAll('tbody tr').forEach(function (tr) {
         var cells = [];
-        tr.querySelectorAll('td').forEach(function (td) { cells.push(td.textContent); });
+        tr.querySelectorAll('td').forEach(function (td) { cells.push(td.textContent.trim()); });
         rows.push(cells);
       });
-      table = { head: head, rows: rows };
-    }
-    return { kpis: kpis, charts: charts, table: table };
+      var last = heads.length ? heads[heads.length - 1].map(function (c) { return c.t; }) : [];
+      tables[id] = { heads: heads, head: last, rows: rows };
+    });
+    return { tiles: tiles, charts: charts, tables: tables };
   }
 
+  // Context used by the commentary rules: tile lookup by label (exact first, then prefix).
+  function num(s) {
+    var t = String(s == null ? '' : s).replace(/[−–]/g, '-').replace(/\$/g, '').replace(/,/g, '');
+    var m = t.match(/-?\d+(\.\d+)?/);
+    return m ? parseFloat(m[0]) : null;
+  }
+  function chg(d) {
+    var m = String(d || '').replace(/[−–]/g, '-').match(/\(([+-]?\d+(?:\.\d+)?)%\)/);
+    return m ? parseFloat(m[1]) : null;
+  }
+  function ctxOf(s) {
+    var tiles = s.tiles.map(function (t) { return { label: t.label, value: t.value, delta: t.delta, sub: t.sub, n: num(t.value), c: chg(t.delta) }; });
+    function tile(label) {
+      var hit = null, i;
+      for (i = 0; i < tiles.length; i++) if (tiles[i].label === label) { hit = tiles[i]; break; }
+      if (!hit) for (i = 0; i < tiles.length; i++) if (tiles[i].label.indexOf(label) === 0) { hit = tiles[i]; break; }
+      return hit || { n: null, c: null, value: '', delta: '', sub: '', label: label };
+    }
+    return { tiles: tiles, tile: tile, table: function (id) { return s.tables[id] || null; } };
+  }
+  function pick(ctx, labels) {
+    var out = [];
+    labels.forEach(function (l) { var t = ctx.tile(l); if (t.value) out.push({ label: t.label, value: t.value, delta: t.delta, sub: t.sub }); });
+    return out;
+  }
+  function tbl(s, id) { var t = s.tables[id]; return t ? { heads: t.heads, rows: t.rows } : null; }
+
   function cleanup(list) {
-    list.forEach(function (s) { (s.charts || []).forEach(function (c) { if (c.el && c.el.parentNode) c.el.parentNode.removeChild(c.el); }); });
+    list.forEach(function (s) { Object.keys(s.charts).forEach(function (k) { var c = s.charts[k]; if (c && c.parentNode) c.parentNode.removeChild(c); }); });
   }
 
   async function runExport() {
-    var w = cur;
-    if (!w || !window.__pptx) return;
-    var from = w.from, to = w.to;
+    var pr = period();
+    if (!pr || busy || !window.__pptx || !window.__insights) return;
+    busy = true; btn.disabled = true;
+    var from = pr.from, to = pr.to, len = dayCount(from, to);
     var ms = monthStart(from), me = minD(monthEnd(from), DI.dataEnd);
-    var pf = addD(from, -7), pt = addD(from, -1), hasPrev = pf >= DI.dataStart;
-    btn.disabled = true;
+    // Month block only when the period is part of one month and is not the whole month.
+    var sub = from.slice(0, 7) === to.slice(0, 7) && !(from === ms && to === me);
+    var pf = addD(from, -len), pt = addD(from, -1), hasPrev = pf >= DI.dataStart;
+    var lists = [];
     try {
-      status('Đang xuất PPTX: tính tháng ' + dm(ms) + '–' + dm(me) + '…');
-      await showCustom(ms, me); var mon = snap();
-      status('Đang xuất PPTX: tính tuần ' + dm(from) + '–' + dm(to) + '…');
-      await showCustom(from, to); var wk = snap();
-      var pv = null;
-      if (hasPrev) { status('Đang xuất PPTX: tính tuần trước…'); await showCustom(pf, pt); pv = snap(); }
-      await showCustom(from, to);
-      var slides = [
-        { section: 'Tổng quan tháng', title: 'Kinh doanh tháng ' + dm(ms) + '–' + dm(me) + '/' + ms.slice(0, 4), kpis: mon.kpis.slice(0, 4), charts: mon.charts.filter(function (c) { return c.id === 'ch-ov'; }).map(function (c) { return c.el; }) },
-        { section: 'Tổng quan tháng', title: 'Báo cáo tình hình kinh doanh - tháng', table: mon.table },
-        { section: 'Kết quả tuần', title: 'Tuần ' + dmy(from) + ' – ' + dmy(to), kpis: wk.kpis.slice(0, 4), charts: wk.charts.filter(function (c) { return c.id !== 'ch-ov'; }).map(function (c) { return c.el; }) },
-        { section: 'Kết quả tuần', title: 'Báo cáo tình hình kinh doanh - tuần', table: wk.table }
-      ];
-      if (pv) slides.push({ section: 'Kết quả tuần', title: 'So sánh: tuần liền trước ' + dm(pf) + '–' + dm(pt), kpis: pv.kpis.slice(0, 4) });
+      var mon = null;
+      if (sub) { status('Đang xuất PPTX: tính tháng ' + dm(ms) + '–' + dm(me) + '…'); await showCustom(ms, me); mon = snap(); lists.push(mon); }
+      status('Đang xuất PPTX: tính kỳ ' + dm(from) + '–' + dm(to) + '…');
+      await showCustom(from, to); var cur = snap(); lists.push(cur);
+      var cc = ctxOf(cur), I = window.__insights;
+      var slides = [];
+
+      slides.push({ kind: 'cover', title: 'SEN TTS — Báo cáo kinh doanh', subtitle: 'Kỳ ' + dmy(from) + ' – ' + dmy(to),
+        meta: [
+          'So sánh với: ' + (hasPrev ? 'kỳ liền trước ' + dmy(pf) + ' – ' + dmy(pt) : 'chưa đủ dữ liệu kỳ trước'),
+          'Dữ liệu đến ' + dmy(DI.dataEnd) + ' (GMT-8)',
+          'Nguồn: Business Report, Ads Performance, Channel Analytics (dashboard TTS Senotori)',
+          'Nội bộ Megaficus'] });
+
+      slides.push({ kind: 'list', section: 'Tóm tắt', title: 'Tóm tắt điều hành',
+        kpis: pick(cc, ['Total GMV', 'Total Ads Spend', 'Lợi nhuận ròng', 'TACOS']),
+        list: I.summary(cc).concat(['Chi tiết từng phần ở các slide sau; mỗi slide có khối Nhận định.']).slice(0, 6),
+        note: 'Nhận định được sinh tự động theo quy tắc từ số liệu trên dashboard; đối chiếu với bảng trước khi trình BOD.' });
+
+      if (sub) {
+        var mc = ctxOf(mon);
+        slides.push({ section: 'Tổng quan tháng', title: 'Kinh doanh tháng ' + dm(ms) + '–' + dm(me) + '/' + ms.slice(0, 4),
+          kpis: pick(mc, ['Total GMV', 'Total Ads Spend', 'Lợi nhuận ròng', 'TACOS']),
+          charts: [mon.charts['ch-ov']].filter(Boolean), bullets: I.topic('overview', mc) });
+        slides.push({ section: 'Tổng quan tháng', title: 'Báo cáo tình hình kinh doanh - tháng', table: tbl(mon, 't-sh'), bullets: I.topic('sh', mc) });
+      }
+
+      slides.push({ section: 'Kết quả kỳ', title: 'Business Performance kỳ ' + dm(from) + '–' + dm(to),
+        kpis: pick(cc, ['Total GMV', 'Total Ads Spend', 'Lợi nhuận ròng', 'TACOS']),
+        charts: [cur.charts['ch-b0'], cur.charts['ch-b4']].filter(Boolean),
+        bullets: I.topic('bpo', cc) });
+      slides.push({ section: 'Kết quả kỳ', title: 'Báo cáo P&L', table: tbl(cur, 't-pl'), bullets: I.topic('pl', cc),
+        note: '% GMV = tỷ lệ so với Total GMV cùng kỳ. Số âm là chi phí.' });
+      slides.push({ section: 'Kết quả kỳ', title: 'Báo cáo tình hình kinh doanh - kỳ', table: tbl(cur, 't-sh'), bullets: I.topic('sh', cc),
+        note: 'Bảng theo mốc đang chọn trên dashboard (Ngày / Tuần / Tháng).' });
+
+      slides.push({ section: 'Quảng cáo', title: 'Ads Performance kỳ ' + dm(from) + '–' + dm(to),
+        kpis: cur.tiles.filter(function (t) { return t.value && ['ROAS', 'CPA GMV Max', 'Tổng Ads GMV', 'Số đơn Ads'].indexOf(t.label) >= 0; }).slice(0, 4),
+        charts: [cur.charts['ch-ap1'], cur.charts['ch-ap4']].filter(Boolean), bullets: I.topic('ads', cc) });
+      slides.push({ section: 'Quảng cáo', title: 'Chỉ số theo sản phẩm (GMV Max)', table: tbl(cur, 't-apb'), bullets: I.topic('apb', cc),
+        note: 'Ads Manager không tách được theo sản phẩm, nên bảng chỉ gồm GMV Max.' });
+
+      slides.push({ section: 'Kênh bán', title: 'Channel Analytics kỳ ' + dm(from) + '–' + dm(to),
+        kpis: pick(cc, ['Impression', 'Click', 'CTR (Click ÷ Impression)', 'CR (Click → đơn)']),
+        charts: [cur.charts['ch-ca1'], cur.charts['ch-ca2']].filter(Boolean), bullets: I.topic('ca', cc) });
+      slides.push({ section: 'Kênh bán', title: 'GMV theo kênh', table: tbl(cur, 't-ca1') });
+
+      slides.push({ section: 'So sánh', title: hasPrev ? 'So sánh với kỳ liền trước' : 'So sánh kỳ trước (chưa đủ dữ liệu)',
+        table: tbl(cur, 't-mom'), bullets: I.topic('mom', cc) });
+
+      var acts = I.actions(cc);
+      slides.push({ kind: 'list', section: 'Hành động', title: 'Đề xuất hành động',
+        list: acts.length ? acts : ['Không có hành động bắt buộc theo các quy tắc đã đặt; theo dõi lại ở kỳ sau.'],
+        note: 'Đề xuất sinh theo quy tắc từ số liệu; quyết định cuối cùng thuộc người phụ trách.' });
+
       status('Đang tạo file PPTX…');
       await window.__pptx.build({ file: 'TTS_Senotori_' + from + '_' + to + '.pptx', slides: slides });
-      cleanup([mon, wk].concat(pv ? [pv] : []));
-      status('Đã xuất file PPTX tuần ' + dmy(from) + ' – ' + dmy(to) + '.');
+      status('Đã xuất file PPTX kỳ ' + dmy(from) + ' – ' + dmy(to) + '.');
     } catch (e) {
       status('Không xuất được PPTX (' + (e && e.message ? e.message : e) + ').');
     } finally {
-      btn.disabled = false;
+      cleanup(lists);
+      // Put the page back on the period the user had selected.
+      try {
+        if (pr.key.indexOf('custom:') === 0) await showCustom(from, to); else await showKey(pr.key);
+      } catch (e) { /* page keeps its last state */ }
+      busy = false; btn.disabled = false;
     }
   }
 
+  function update() {
+    if (!btn || busy) return;
+    btn.hidden = !period();
+  }
+
   function mount() {
-    wrap = document.createElement('div');
+    var wrap = document.createElement('div');
     wrap.style.cssText = 'display:flex;justify-content:flex-end;margin-top:8px';
     btn = document.createElement('button');
     btn.type = 'button'; btn.className = 'tgl'; btn.hidden = true;
@@ -1080,11 +1361,16 @@ window.__pptx = (function () {
     document.getElementById('tabs').parentNode.insertBefore(wrap, document.getElementById('tabs'));
   }
 
-  document.addEventListener('tts-week', function (e) {
-    cur = e.detail;
-    if (!btn) mount();
-    btn.hidden = !cur;
-  });
+  function start() {
+    var fp = document.getElementById('f-pre');
+    if (!document.getElementById('tabs') || !fp) return false;
+    mount();
+    // The page changes curKey and the period buttons together (showKey / showCustom), so watching them is enough.
+    new MutationObserver(update).observe(fp, { childList: true, subtree: true, attributes: true, attributeFilter: ['class'] });
+    update();
+    return true;
+  }
+  if (!start()) document.addEventListener('DOMContentLoaded', start);
 })();
 </script>
 <script>

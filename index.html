@@ -822,6 +822,271 @@ function buildPayload(E, FROM, TO, pdlCsv){
 window.__custom={buildEngine,buildPayload,csvParse};
 })();
 </script>
+<script>/* PPTX export (weekly / monthly BOD slides). Charts are captured from the live SVG. */
+window.__pptx = (function () {
+  var LIB = 'https://cdn.jsdelivr.net/npm/pptxgenjs@3.12.0/dist/pptxgen.bundle.js';
+  var FONT = 'Plus Jakarta Sans';
+  var C = { dark: '032312', green: '1B7A4A', mint: '65BD8F', text: '333333', muted: '6B7280', line: 'E5E7EB', card: 'F9FAFB' };
+
+  function loadLib() {
+    if (window.PptxGenJS) return Promise.resolve();
+    return new Promise(function (res, rej) {
+      var s = document.createElement('script');
+      s.src = LIB; s.onload = res;
+      s.onerror = function () { rej(new Error('pptxgenjs load failed')); };
+      document.head.appendChild(s);
+    });
+  }
+
+  function resolveVars(str) {
+    var cs = getComputedStyle(document.documentElement);
+    return str.replace(/var\((--[\w-]+)\)/g, function (_, n) {
+      return cs.getPropertyValue(n).trim() || '#000000';
+    });
+  }
+
+  // Rasterise a live SVG chart at 2x so it matches the dashboard exactly.
+  function svgToPng(svg, scale) {
+    scale = scale || 2;
+    var r = svg.getBoundingClientRect();
+    var w = Math.max(1, Math.round(r.width)), h = Math.max(1, Math.round(r.height));
+    var clone = svg.cloneNode(true);
+    clone.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
+    clone.setAttribute('width', w); clone.setAttribute('height', h);
+    var xml = resolveVars(new XMLSerializer().serializeToString(clone));
+    return new Promise(function (res, rej) {
+      var img = new Image();
+      img.onload = function () {
+        var c = document.createElement('canvas');
+        c.width = w * scale; c.height = h * scale;
+        var g = c.getContext('2d');
+        g.fillStyle = '#FFFFFF'; g.fillRect(0, 0, c.width, c.height);
+        g.scale(scale, scale); g.drawImage(img, 0, 0, w, h);
+        res({ data: c.toDataURL('image/png'), w: w, h: h });
+      };
+      img.onerror = function () { rej(new Error('svg render failed')); };
+      img.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(xml);
+    });
+  }
+
+  function header(sl, section, title) {
+    sl.background = { color: 'FFFFFF' };
+    sl.addText(section, { x: 0.5, y: 0.3, w: 4.5, h: 0.3, fontFace: FONT, fontSize: 9, bold: true, color: 'FFFFFF', fill: { color: C.green }, align: 'center', valign: 'middle' });
+    sl.addText(title, { x: 0.5, y: 0.7, w: 12.3, h: 0.6, fontFace: FONT, fontSize: 26, bold: true, color: C.dark, valign: 'middle' });
+  }
+
+  function footer(sl, n) {
+    sl.addText('Megaficus | E-Commerce Growth Partner    ' + n, { x: 0.5, y: 7.05, w: 12.3, h: 0.25, fontFace: FONT, fontSize: 8, color: '999999' });
+  }
+
+  // deck = { file, slides: [{ section, title, kpis?: [{label,value,delta}], charts?: [svgElement], table?: {head: [], rows: [[]]} }] }
+  async function build(deck) {
+    await loadLib();
+    var p = new window.PptxGenJS();
+    p.layout = 'LAYOUT_WIDE';
+    var n = 0;
+    for (var i = 0; i < deck.slides.length; i++) {
+      var s = deck.slides[i];
+      var sl = p.addSlide(); n++;
+      header(sl, s.section || '', s.title || '');
+      var y = 1.5;
+      if (s.kpis && s.kpis.length) {
+        s.kpis.forEach(function (k, j) {
+          var x = 0.5 + j * 3.1;
+          sl.addShape(p.ShapeType.rect, { x: x, y: y, w: 2.9, h: 1.3, fill: { color: C.card }, line: { color: C.line } });
+          sl.addShape(p.ShapeType.rect, { x: x, y: y, w: 2.9, h: 0.05, fill: { color: C.green }, line: { color: C.green } });
+          sl.addText(k.label, { x: x + 0.15, y: y + 0.1, w: 2.6, h: 0.3, fontFace: FONT, fontSize: 10, color: C.muted });
+          sl.addText(k.value, { x: x + 0.15, y: y + 0.4, w: 2.6, h: 0.5, fontFace: FONT, fontSize: 24, bold: true, color: C.green });
+          sl.addText(k.delta || '', { x: x + 0.15, y: y + 0.9, w: 2.6, h: 0.3, fontFace: FONT, fontSize: 10, color: C.text });
+        });
+        y += 1.6;
+      }
+      if (s.charts && s.charts.length) {
+        var imgs = [];
+        for (var c = 0; c < s.charts.length; c++) imgs.push(await svgToPng(s.charts[c]));
+        var slot = s.charts.length > 1 ? 6.1 : 12.3;
+        var maxH = 7.0 - y - 0.3;
+        imgs.forEach(function (im, k) {
+          var hgt = Math.min(maxH, slot * im.h / im.w);
+          var wid = hgt * im.w / im.h;
+          sl.addImage({ data: im.data, x: 0.5 + k * (slot + 0.1), y: y, w: wid, h: hgt });
+        });
+        y += maxH + 0.1;
+      }
+      if (s.table && s.table.rows && s.table.rows.length) {
+        var rows = [s.table.head.map(function (t) { return { text: String(t), options: { bold: true, color: 'FFFFFF', fill: { color: C.green } } }; })];
+        s.table.rows.forEach(function (r) { rows.push(r.map(function (t) { return { text: String(t), options: { color: C.text } }; })); });
+        sl.addTable(rows, { x: 0.5, y: y, w: 12.3, fontFace: FONT, fontSize: 10, rowH: 0.28, border: { type: 'solid', color: C.line, pt: 0.5 } });
+      }
+      footer(sl, n);
+    }
+    await p.writeFile({ fileName: deck.file });
+  }
+
+  return { build: build, svgToPng: svgToPng };
+})();
+/* Overview: Tuan thang (week-of-month) filter. Picks a Monday-Sunday week and reuses the page's showCustom(). */
+(function () {
+  'use strict';
+  var built = false;
+
+  function d0(s) { var p = s.split('-').map(Number); return new Date(Date.UTC(p[0], p[1] - 1, p[2])); }
+  function s0(d) { return d.toISOString().slice(0, 10); }
+  function addD(s, n) { var d = d0(s); d.setUTCDate(d.getUTCDate() + n); return s0(d); }
+  function minD(a, b) { return a < b ? a : b; }
+  function maxD(a, b) { return a > b ? a : b; }
+  function monday(s) { var d = d0(s); var wd = (d.getUTCDay() + 6) % 7; d.setUTCDate(d.getUTCDate() - wd); return s0(d); }
+  function dm(s) { return s.slice(8, 10) + '/' + s.slice(5, 7); }
+
+  function weeks() {
+    var out = [], st = monday(DI.dataStart);
+    while (st <= DI.dataEnd) {
+      out.push({ from: maxD(st, DI.dataStart), to: minD(addD(st, 6), DI.dataEnd) });
+      st = addD(st, 7);
+    }
+    return out;
+  }
+
+  // Clears the week selection and tells listeners (the export button) that no week is active.
+  function clearWeek() {
+    window.__ttsWeek = null;
+    document.dispatchEvent(new CustomEvent('tts-week', { detail: null }));
+    var b = document.getElementById('wk-pre');
+    if (b) b.querySelectorAll('button').forEach(function (x) { x.className = ''; });
+  }
+
+  function build() {
+    if (built || !DI || !DI.dataStart) return;
+    built = true;
+    var box = document.createElement('div');
+    box.className = 'seg'; box.id = 'wk-pre';
+    weeks().forEach(function (w) {
+      var b = document.createElement('button');
+      b.textContent = 'Tuần ' + dm(w.from) + '–' + dm(w.to);
+      b.onclick = function () {
+        clearWeek();
+        b.className = 'on';
+        window.__ttsWeek = w;
+        showCustom(w.from, w.to).then(function () {
+          document.dispatchEvent(new CustomEvent('tts-week', { detail: w }));
+        });
+      };
+      box.appendChild(b);
+    });
+    document.getElementById('f-pre').parentNode.appendChild(box);
+    document.getElementById('f-pre').addEventListener('click', clearWeek, true);
+    document.getElementById('f-custom').addEventListener('submit', clearWeek, true);
+  }
+
+  var fp = document.getElementById('f-pre');
+  if (fp) new MutationObserver(build).observe(fp, { childList: true });
+})();
+/* PPTX export button. Shows when the Tuan thang (week) filter is active; exports the week, its month and the previous week. */
+(function () {
+  'use strict';
+  var btn = null, wrap = null, cur = null;
+
+  function d0(s) { var p = s.split('-').map(Number); return new Date(Date.UTC(p[0], p[1] - 1, p[2])); }
+  function s0(d) { return d.toISOString().slice(0, 10); }
+  function addD(s, n) { var d = d0(s); d.setUTCDate(d.getUTCDate() + n); return s0(d); }
+  function minD(a, b) { return a < b ? a : b; }
+  function monthStart(s) { return s.slice(0, 8) + '01'; }
+  function monthEnd(s) { var d = d0(monthStart(s)); d.setUTCMonth(d.getUTCMonth() + 1); d.setUTCDate(0); return s0(d); }
+  function dm(s) { return s.slice(8, 10) + '/' + s.slice(5, 7); }
+  function dmy(s) { return s.slice(8, 10) + '/' + s.slice(5, 7) + '/' + s.slice(0, 4); }
+  function status(t) { var n = document.getElementById('f-note'); if (n) n.textContent = t; }
+
+  // Copy what is on screen right now (the page renders synchronously after showCustom).
+  function snap() {
+    var kpis = [];
+    document.querySelectorAll('#br-tiles .tile').forEach(function (t) {
+      var l = t.querySelector('.l'), b = t.querySelector('b'), d = t.querySelector('.d');
+      kpis.push({ label: l ? l.textContent : '', value: b ? b.textContent : '', delta: d ? d.textContent : '' });
+    });
+    var charts = [];
+    ['ch-ov', 'ch-b0', 'ch-b4'].forEach(function (id) {
+      var s = document.querySelector('#' + id + ' svg');
+      if (!s) return;
+      var r = s.getBoundingClientRect();
+      var c = s.cloneNode(true);
+      c.setAttribute('width', r.width); c.setAttribute('height', r.height);
+      c.style.position = 'absolute'; c.style.left = '-99999px';
+      document.body.appendChild(c);
+      charts.push({ id: id, el: c });
+    });
+    var table = null, t = document.getElementById('t-sh');
+    if (t) {
+      var hr = t.querySelectorAll('thead tr');
+      var headRow = hr[hr.length - 1];
+      var head = [];
+      headRow.querySelectorAll('th').forEach(function (th) { head.push(th.textContent); });
+      var rows = [];
+      t.querySelectorAll('tbody tr').forEach(function (tr) {
+        var cells = [];
+        tr.querySelectorAll('td').forEach(function (td) { cells.push(td.textContent); });
+        rows.push(cells);
+      });
+      table = { head: head, rows: rows };
+    }
+    return { kpis: kpis, charts: charts, table: table };
+  }
+
+  function cleanup(list) {
+    list.forEach(function (s) { (s.charts || []).forEach(function (c) { if (c.el && c.el.parentNode) c.el.parentNode.removeChild(c.el); }); });
+  }
+
+  async function runExport() {
+    var w = cur;
+    if (!w || !window.__pptx) return;
+    var from = w.from, to = w.to;
+    var ms = monthStart(from), me = minD(monthEnd(from), DI.dataEnd);
+    var pf = addD(from, -7), pt = addD(from, -1), hasPrev = pf >= DI.dataStart;
+    btn.disabled = true;
+    try {
+      status('Đang xuất PPTX: tính tháng ' + dm(ms) + '–' + dm(me) + '…');
+      await showCustom(ms, me); var mon = snap();
+      status('Đang xuất PPTX: tính tuần ' + dm(from) + '–' + dm(to) + '…');
+      await showCustom(from, to); var wk = snap();
+      var pv = null;
+      if (hasPrev) { status('Đang xuất PPTX: tính tuần trước…'); await showCustom(pf, pt); pv = snap(); }
+      await showCustom(from, to);
+      var slides = [
+        { section: 'Tổng quan tháng', title: 'Kinh doanh tháng ' + dm(ms) + '–' + dm(me) + '/' + ms.slice(0, 4), kpis: mon.kpis.slice(0, 4), charts: mon.charts.filter(function (c) { return c.id === 'ch-ov'; }).map(function (c) { return c.el; }) },
+        { section: 'Tổng quan tháng', title: 'Báo cáo tình hình kinh doanh - tháng', table: mon.table },
+        { section: 'Kết quả tuần', title: 'Tuần ' + dmy(from) + ' – ' + dmy(to), kpis: wk.kpis.slice(0, 4), charts: wk.charts.filter(function (c) { return c.id !== 'ch-ov'; }).map(function (c) { return c.el; }) },
+        { section: 'Kết quả tuần', title: 'Báo cáo tình hình kinh doanh - tuần', table: wk.table }
+      ];
+      if (pv) slides.push({ section: 'Kết quả tuần', title: 'So sánh: tuần liền trước ' + dm(pf) + '–' + dm(pt), kpis: pv.kpis.slice(0, 4) });
+      status('Đang tạo file PPTX…');
+      await window.__pptx.build({ file: 'TTS_Senotori_' + from + '_' + to + '.pptx', slides: slides });
+      cleanup([mon, wk].concat(pv ? [pv] : []));
+      status('Đã xuất file PPTX tuần ' + dmy(from) + ' – ' + dmy(to) + '.');
+    } catch (e) {
+      status('Không xuất được PPTX (' + (e && e.message ? e.message : e) + ').');
+    } finally {
+      btn.disabled = false;
+    }
+  }
+
+  function mount() {
+    wrap = document.createElement('div');
+    wrap.style.cssText = 'display:flex;justify-content:flex-end;margin-top:8px';
+    btn = document.createElement('button');
+    btn.type = 'button'; btn.className = 'tgl'; btn.hidden = true;
+    btn.style.margin = '0';
+    btn.textContent = '⬇ Export (PPTX)';
+    btn.onclick = runExport;
+    wrap.appendChild(btn);
+    document.getElementById('tabs').parentNode.insertBefore(wrap, document.getElementById('tabs'));
+  }
+
+  document.addEventListener('tts-week', function (e) {
+    cur = e.detail;
+    if (!btn) mount();
+    btn.hidden = !cur;
+  });
+})();
+</script>
 <script>
 let P=null,PD=null,MONTHS=[],DI={};let curKey='';
 const $=id=>document.getElementById(id);
